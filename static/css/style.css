@@ -1,0 +1,117 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+  padding: 20px;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 16px;
+  color: #e0b04f;
+  font-size: 1.8rem;
+}
+
+.summary {
+  text-align: center;
+  font-size: 1.2rem;
+  margin-bottom: 20px;
+  color: #a8d8a8;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.controls input,
+.controls select {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #16213e;
+  color: #eee;
+  font-size: 0.95rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #16213e;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+thead tr {
+  background: #0f3460;
+  color: #e0b04f;
+}
+
+th,
+td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #263254;
+}
+
+tr.member-row:hover {
+  background: #1e3a5f;
+}
+
+tr.member-row.confirmed {
+  background: #1a3a2a;
+}
+
+tr.member-row.confirmed td {
+  color: #a8d8a8;
+}
+
+.btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-confirm {
+  background: #444;
+  color: #eee;
+}
+
+.btn-confirm.active {
+  background: #2e7d4f;
+  color: #fff;
+}
+
+.btn-confirm:hover {
+  background: #2e7d4f;
+  color: #fff;
+}
+
+.btn-reset {
+  background: #8b2222;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.btn-reset:hover {
+  background: #b52b2b;
+}

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ตรวจสอบการเข้าร่วมสมาชิกกิลด์</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <h1>ตรวจสอบการเข้าร่วมสมาชิกกิลด์</h1>
+
+    <div class="summary">
+      <span id="confirmed-count">{{ confirmed }}</span> / <span id="total-count">{{ total }}</span> คน ยืนยันแล้ว
+    </div>
+
+    <div class="controls">
+      <input
+        type="text"
+        id="search"
+        placeholder="ค้นหาชื่อตำแหน่ง / ชื่อผู้เล่น..."
+        oninput="filterMembers()"
+      />
+      <select id="class-filter" onchange="filterMembers()">
+        <option value="">-- ทุกอาชีพ --</option>
+        {% set classes = members | map(attribute='class') | unique | sort %}
+        {% for cls in classes %}
+        <option value="{{ cls }}">{{ cls }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-reset" onclick="resetAttendance()">รีเซ็ตการยืนยัน</button>
+    </div>
+
+    <table id="member-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>ตำแหน่ง</th>
+          <th>อาชีพ</th>
+          <th>ชื่อผู้เล่น</th>
+          <th>ยืนยัน</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for member in members %}
+        <tr
+          class="member-row{% if member.confirmed %} confirmed{% endif %}"
+          data-index="{{ loop.index0 }}"
+          data-position="{{ member.position | lower }}"
+          data-player="{{ member.player_name | lower }}"
+          data-class="{{ member.class }}"
+        >
+          <td>{{ loop.index }}</td>
+          <td>{{ member.position }}</td>
+          <td>{{ member.class }}</td>
+          <td>{{ member.player_name if member.player_name else '-' }}</td>
+          <td>
+            <button
+              class="btn btn-confirm{% if member.confirmed %} active{% endif %}"
+              onclick="toggleConfirm({{ loop.index0 }}, this)"
+            >
+              {% if member.confirmed %}✔ ยืนยันแล้ว{% else %}ยืนยัน{% endif %}
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    function toggleConfirm(index, btn) {
+      const row = document.querySelector(`tr[data-index="${index}"]`);
+      const currentlyConfirmed = row.classList.contains("confirmed");
+      const newState = !currentlyConfirmed;
+
+      fetch(`/api/members/${index}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed: newState }),
+      })
+        .then((r) => {
+          if (!r.ok) throw new Error("Request failed: " + r.status);
+          return r.json();
+        })
+        .then((data) => {
+          if (data.confirmed) {
+            row.classList.add("confirmed");
+            btn.classList.add("active");
+            btn.textContent = "✔ ยืนยันแล้ว";
+          } else {
+            row.classList.remove("confirmed");
+            btn.classList.remove("active");
+            btn.textContent = "ยืนยัน";
+          }
+          updateSummary();
+        })
+        .catch(() => alert("เกิดข้อผิดพลาด กรุณาลองใหม่"));
+    }
+
+    function updateSummary() {
+      const confirmed = document.querySelectorAll("tr.member-row.confirmed").length;
+      const total = document.querySelectorAll("tr.member-row").length;
+      document.getElementById("confirmed-count").textContent = confirmed;
+      document.getElementById("total-count").textContent = total;
+    }
+
+    function filterMembers() {
+      const search = document.getElementById("search").value.toLowerCase();
+      const classFilter = document.getElementById("class-filter").value;
+      const rows = document.querySelectorAll("tr.member-row");
+      rows.forEach((row) => {
+        const matchSearch =
+          !search ||
+          row.dataset.position.includes(search) ||
+          row.dataset.player.includes(search);
+        const matchClass = !classFilter || row.dataset.class === classFilter;
+        row.style.display = matchSearch && matchClass ? "" : "none";
+      });
+    }
+
+    function resetAttendance() {
+      if (!confirm("รีเซ็ตการยืนยันทั้งหมด?")) return;
+      fetch("/api/reset", { method: "POST" })
+        .then((r) => {
+          if (!r.ok) throw new Error("Request failed: " + r.status);
+          return r.json();
+        })
+        .then(() => location.reload())
+        .catch(() => alert("เกิดข้อผิดพลาด กรุณาลองใหม่"));
+    }
+  </script>
+</body>
+</html>
