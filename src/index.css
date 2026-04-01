@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg-primary: #0f172a;
+  --color-bg-primary: #020617;
   --color-bg-secondary: #1e293b;
   --color-bg-card: #1e293b;
   --color-border: #334155;
@@ -9,11 +9,16 @@
   --color-accent-hover: #818cf8;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   background-color: var(--color-bg-primary);
   color: #e2e8f0;
   font-family: 'Segoe UI', system-ui, sans-serif;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .drag-over {
