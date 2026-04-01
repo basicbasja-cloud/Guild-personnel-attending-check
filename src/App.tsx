@@ -5,6 +5,7 @@ import { Header } from './components/layout/Header';
 import { AttendancePage } from './components/attendance/AttendancePage';
 import { ManagementPage } from './components/management/ManagementPage';
 import { AttendanceList } from './components/management/AttendanceList';
+import { AdminPinModal } from './components/management/AdminPinModal';
 import { useAttendance } from './hooks/useAttendance';
 
 type Tab = 'attendance' | 'management' | 'roster';
@@ -16,6 +17,8 @@ function AppContent() {
   const { weekAttendances, weekStartStr } = useAttendance(
     auth.profile?.is_management ? null : null
   );
+
+  const [showPinModal, setShowPinModal] = useState(false);
 
   if (auth.loading) {
     return (
@@ -52,7 +55,7 @@ function AppContent() {
 
       {/* Tab navigation */}
       <div className="bg-slate-900 border-b border-slate-700 px-4">
-        <div className="flex gap-1 max-w-screen-2xl mx-auto">
+        <div className="flex gap-1 max-w-screen-2xl mx-auto items-center">
           {visibleTabs.map((t) => (
             <button
               key={t.id}
@@ -68,6 +71,17 @@ function AppContent() {
               <span>{t.label}</span>
             </button>
           ))}
+
+          {/* PIN management button – only visible to management users */}
+          {auth.profile.is_management && (
+            <button
+              onClick={() => setShowPinModal(true)}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-600"
+              title="Set or change your admin PIN"
+            >
+              🔑 <span>Admin PIN</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -85,6 +99,15 @@ function AppContent() {
           <ManagementPage userId={auth.profile.id} />
         )}
       </main>
+
+      {/* Admin PIN modal */}
+      {showPinModal && auth.profile.is_management && (
+        <AdminPinModal
+          hasPinSet={auth.profile.admin_pin_hash != null}
+          onSetPin={auth.setAdminPin}
+          onClose={() => setShowPinModal(false)}
+        />
+      )}
     </div>
   );
 }

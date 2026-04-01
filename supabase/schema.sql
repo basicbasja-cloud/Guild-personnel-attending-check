@@ -2,6 +2,13 @@
 -- Run this in your Supabase SQL editor (Dashboard → SQL Editor → New query)
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 0. EXTENSIONS
+-- ─────────────────────────────────────────────────────────────────────────────
+-- pgcrypto provides crypt(), gen_salt(), digest(), etc.
+-- Required for admin PIN hashing.
+create extension if not exists pgcrypto with schema extensions;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 1. PROFILES
 --    Extended user info linked to auth.users via Discord OAuth.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -13,6 +20,7 @@ create table if not exists public.profiles (
   character_name  text,
   character_class text,
   is_management   boolean not null default false,
+  admin_pin_hash  text,     -- bcrypt hash of the management PIN (null = no PIN set)
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -193,6 +201,93 @@ create policy "war_party_members_delete_mgmt"
   using (
     exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
   );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 7. PERFORMANCE INDEXES
+--    Add indexes on frequently filtered columns to speed up queries.
+-- ─────────────────────────────────────────────────────────────────────────────
+create index if not exists idx_attendance_week_start
+  on public.attendance (week_start);
+
+create index if not exists idx_attendance_user_id_week_start
+  on public.attendance (user_id, week_start);
+
+create index if not exists idx_war_setups_week_start
+  on public.war_setups (week_start);
+
+create index if not exists idx_war_groups_war_setup_id
+  on public.war_groups (war_setup_id);
+
+create index if not exists idx_war_parties_group_id
+  on public.war_parties (group_id);
+
+create index if not exists idx_war_party_members_war_setup_id
+  on public.war_party_members (war_setup_id);
+
+create index if not exists idx_war_party_members_party_id
+  on public.war_party_members (party_id);
+
+create index if not exists idx_profiles_discord_id
+  on public.profiles (discord_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 8. ADMIN PIN FUNCTIONS
+--    Management users can protect their session with a personal PIN.
+--    The PIN is stored as a bcrypt hash via pgcrypto so the plaintext is never
+--    saved to the database.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- set_admin_pin: hash and store a new PIN for the calling user.
+--   Only management users may call this function.
+create or replace function public.set_admin_pin(pin text)
+  returns void
+  language plpgsql
+  security definer
+  set search_path = public, extensions
+as $$
+declare
+  is_mgmt boolean;
+begin
+  select is_management into is_mgmt
+    from public.profiles
+   where id = auth.uid();
+
+  if not coalesce(is_mgmt, false) then
+    raise exception 'Only management users can set an admin PIN';
+  end if;
+
+  update public.profiles
+     set admin_pin_hash = extensions.crypt(pin, extensions.gen_salt('bf')),
+         updated_at     = now()
+   where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.set_admin_pin(text) to authenticated;
+
+-- verify_admin_pin: return true when the supplied PIN matches the stored hash.
+create or replace function public.verify_admin_pin(pin text)
+  returns boolean
+  language plpgsql
+  security definer
+  set search_path = public, extensions
+as $$
+declare
+  stored_hash text;
+begin
+  select admin_pin_hash into stored_hash
+    from public.profiles
+   where id = auth.uid();
+
+  if stored_hash is null then
+    return false;
+  end if;
+
+  return stored_hash = extensions.crypt(pin, stored_hash);
+end;
+$$;
+
+grant execute on function public.verify_admin_pin(text) to authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Helper: promote a user to management
