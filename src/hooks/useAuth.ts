@@ -61,17 +61,19 @@ export function useAuth() {
     return data as Profile;
   }, []);
 
+  // Safety timeout: if onAuthStateChange never fires (e.g. token refresh
+  // hangs on a slow or restricted network), force loading to false after
+  // AUTH_TIMEOUT_MS so the user sees the login page instead of a stuck spinner.
+  const AUTH_TIMEOUT_MS = 8000;
+
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout: if onAuthStateChange never fires (e.g. token refresh
-    // hangs on a slow or restricted network), force loading to false after
-    // 15 seconds so the user sees the login page instead of a stuck spinner.
     const timeoutId = setTimeout(() => {
       if (mounted) {
         setState((s) => (s.loading ? { ...s, loading: false } : s));
       }
-    }, 15000);
+    }, AUTH_TIMEOUT_MS);
 
     // onAuthStateChange fires INITIAL_SESSION immediately on mount with the
     // cached session, so we no longer need a separate getSession() call.
