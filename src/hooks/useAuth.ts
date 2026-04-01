@@ -64,6 +64,15 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
+    // Safety timeout: if onAuthStateChange never fires (e.g. token refresh
+    // hangs on a slow or restricted network), force loading to false after
+    // 15 seconds so the user sees the login page instead of a stuck spinner.
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        setState((s) => (s.loading ? { ...s, loading: false } : s));
+      }
+    }, 15000);
+
     // onAuthStateChange fires INITIAL_SESSION immediately on mount with the
     // cached session, so we no longer need a separate getSession() call.
     // Removing the duplicate avoids fetching the profile twice on page load,
@@ -72,22 +81,35 @@ export function useAuth() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
-      if (session?.user) {
-        const profile =
-          (await fetchProfile(session.user.id)) ||
-          (await upsertProfile(session.user));
-        if (mounted) {
-          setState({ user: session.user, session, profile, loading: false, error: null });
+      try {
+        if (session?.user) {
+          const profile =
+            (await fetchProfile(session.user.id)) ||
+            (await upsertProfile(session.user));
+          if (mounted) {
+            setState({ user: session.user, session, profile, loading: false, error: null });
+          }
+        } else {
+          if (mounted) {
+            setState({ user: null, session: null, profile: null, loading: false, error: null });
+          }
         }
-      } else {
+      } catch (err) {
+        // If profile fetch/upsert throws (e.g. network error), ensure loading
+        // is always cleared so users are never permanently stuck on the spinner.
         if (mounted) {
-          setState({ user: null, session: null, profile: null, loading: false, error: null });
+          setState((s) => ({
+            ...s,
+            loading: false,
+            error: err instanceof Error ? err.message : 'Unexpected error during sign-in',
+          }));
         }
       }
     });
 
     return () => {
       mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [fetchProfile, upsertProfile]);
