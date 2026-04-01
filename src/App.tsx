@@ -20,12 +20,27 @@ function AppContent() {
 
   const [showPinModal, setShowPinModal] = useState(false);
 
+  // While we are still checking the auth state (e.g. fetching the profile
+  // after an INITIAL_SESSION or SIGNED_IN event), show a neutral full-page
+  // spinner.  This keeps the login page completely out of view until it is
+  // actually needed, avoiding the confusing "Redirecting…" disabled-button
+  // state that made PC users think the app was permanently stuck.
+  if (auth.loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <svg className="animate-spin h-10 w-10 text-indigo-500" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      </div>
+    );
+  }
+
   if (!auth.user || !auth.profile) {
     return (
       <LoginPage
         onLogin={auth.signInWithDiscord}
         error={auth.error}
-        loading={auth.loading}
       />
     );
   }

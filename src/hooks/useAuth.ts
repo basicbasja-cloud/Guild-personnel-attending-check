@@ -64,7 +64,9 @@ export function useAuth() {
   // Safety timeout: if onAuthStateChange never fires (e.g. token refresh
   // hangs on a slow or restricted network), force loading to false after
   // AUTH_TIMEOUT_MS so the user sees the login page instead of a stuck spinner.
-  const AUTH_TIMEOUT_MS = 8000;
+  // 3 s is enough for a healthy connection while still being quick to fall back
+  // on PC browsers where Supabase requests can be blocked or throttled.
+  const AUTH_TIMEOUT_MS = 3000;
 
   useEffect(() => {
     let mounted = true;
