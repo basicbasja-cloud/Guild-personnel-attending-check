@@ -64,27 +64,10 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
-    const initAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      if (session?.user) {
-        const profile =
-          (await fetchProfile(session.user.id)) ||
-          (await upsertProfile(session.user));
-        if (mounted) {
-          setState({ user: session.user, session, profile, loading: false, error: null });
-        }
-      } else {
-        setState((s) => ({ ...s, loading: false }));
-      }
-    };
-
-    initAuth();
-
+    // onAuthStateChange fires INITIAL_SESSION immediately on mount with the
+    // cached session, so we no longer need a separate getSession() call.
+    // Removing the duplicate avoids fetching the profile twice on page load,
+    // which was the primary cause of the slow initial render.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -93,9 +76,13 @@ export function useAuth() {
         const profile =
           (await fetchProfile(session.user.id)) ||
           (await upsertProfile(session.user));
-        setState({ user: session.user, session, profile, loading: false, error: null });
+        if (mounted) {
+          setState({ user: session.user, session, profile, loading: false, error: null });
+        }
       } else {
-        setState({ user: null, session: null, profile: null, loading: false, error: null });
+        if (mounted) {
+          setState({ user: null, session: null, profile: null, loading: false, error: null });
+        }
       }
     });
 
@@ -133,5 +120,16 @@ export function useAuth() {
     return error;
   };
 
-  return { ...state, signInWithDiscord, signOut, updateProfile };
+  const setAdminPin = async (pin: string): Promise<string | null> => {
+    const { error } = await supabase.rpc('set_admin_pin', { pin });
+    return error ? error.message : null;
+  };
+
+  const verifyAdminPin = async (pin: string): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('verify_admin_pin', { pin });
+    if (error) return false;
+    return data === true;
+  };
+
+  return { ...state, signInWithDiscord, signOut, updateProfile, setAdminPin, verifyAdminPin };
 }

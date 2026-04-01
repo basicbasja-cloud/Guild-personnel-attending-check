@@ -8,6 +8,7 @@ export interface Profile {
   character_name: string | null;
   character_class: string | null;
   is_management: boolean;
+  admin_pin_hash: string | null; // bcrypt hash – only used to check if a PIN has been set
   created_at: string;
 }
 
