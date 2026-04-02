@@ -83,6 +83,12 @@ drop policy if exists "attendance_delete_own" on public.attendance;
 create policy "attendance_delete_own"
   on public.attendance for delete using ((select auth.uid()) = user_id);
 
+-- Indexes: speed up the most common query pattern (fetch all rows for a week)
+create index if not exists idx_attendance_week_start
+  on public.attendance (week_start, created_at);
+create index if not exists idx_attendance_user_week
+  on public.attendance (user_id, week_start);
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. WAR SETUPS
 --    One setup per week, created by management.
@@ -137,6 +143,11 @@ create table if not exists public.war_groups (
 
 alter table public.war_groups enable row level security;
 
+-- Index: Postgres does NOT auto-create indexes for FK constraints.
+-- war_groups.bySetup query filters on war_setup_id for every management page load.
+create index if not exists idx_war_groups_setup_id
+  on public.war_groups (war_setup_id);
+
 drop policy if exists "war_groups_select_auth" on public.war_groups;
 create policy "war_groups_select_auth"
   on public.war_groups for select using ((select auth.role()) = 'authenticated');
@@ -168,6 +179,10 @@ create table if not exists public.war_parties (
 );
 
 alter table public.war_parties enable row level security;
+
+-- Index: war_parties.byGroups filters on group_id (IN query over group IDs).
+create index if not exists idx_war_parties_group_id
+  on public.war_parties (group_id);
 
 drop policy if exists "war_parties_select_auth" on public.war_parties;
 create policy "war_parties_select_auth"
@@ -203,6 +218,10 @@ create table if not exists public.war_party_members (
 );
 
 alter table public.war_party_members enable row level security;
+
+-- Index: war_party_members.bySetup filters on war_setup_id (fetches all members for a war).
+create index if not exists idx_war_party_members_setup_id
+  on public.war_party_members (war_setup_id);
 
 drop policy if exists "war_party_members_select_auth" on public.war_party_members;
 create policy "war_party_members_select_auth"

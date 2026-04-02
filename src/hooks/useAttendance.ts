@@ -310,8 +310,8 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
       return;
     }
     setAttendance(data as Attendance);
-    // Fire background refresh so the roster stays in sync; don't await it.
-    refreshSilent();
+    // Realtime subscription will fire from the upsert and refresh all instances.
+    // No explicit refreshSilent() needed here — it would duplicate the fetch.
   };
 
   return {

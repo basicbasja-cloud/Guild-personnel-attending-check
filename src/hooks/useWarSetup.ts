@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { formatISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { withDbTiming } from '../lib/dbTiming';
 import { getUpcomingSaturday } from '../lib/week';
 import type { WarSetup, WarGroup, WarParty, WarPartyMember } from '../types';
 import { MAX_PARTIES_PER_GROUP } from '../types';
@@ -22,38 +23,64 @@ export interface PartyWithMembers {
 }
 
 async function loadSetupData(weekStartStr: string): Promise<WarSetupData | null> {
-  const { data: setupData, error: setupErr } = await supabase
-    .from('war_setups')
-    .select('*')
-    .eq('week_start', weekStartStr)
-    .maybeSingle();
+  const { data: setupData, error: setupErr } = await withDbTiming(
+    'GET',
+    `war_setups.byWeek week=${weekStartStr}`,
+    () =>
+      supabase
+        .from('war_setups')
+        .select('*')
+        .eq('week_start', weekStartStr)
+        .maybeSingle()
+  );
 
   if (setupErr || !setupData) return null;
   const setup = setupData as WarSetup;
 
-  const { data: groupsData } = await supabase
-    .from('war_groups')
-    .select('*')
-    .eq('war_setup_id', setup.id)
-    .order('group_number');
+  // Fetch war_groups and war_party_members in parallel — both only need
+  // setup.id which is now available. war_parties must wait for group IDs,
+  // so it runs in a third round-trip after war_groups resolves.
+  const [groupsResult, membersResult] = await Promise.all([
+    withDbTiming(
+      'GET',
+      `war_groups.bySetup setup=${setup.id}`,
+      () =>
+        supabase
+          .from('war_groups')
+          .select('*')
+          .eq('war_setup_id', setup.id)
+          .order('group_number')
+    ),
+    withDbTiming(
+      'GET',
+      `war_party_members.bySetup setup=${setup.id}`,
+      () =>
+        supabase
+          .from('war_party_members')
+          .select('*, profile:profiles(*)')
+          .eq('war_setup_id', setup.id)
+          .order('position')
+    ),
+  ]);
 
-  const groups = (groupsData ?? []) as WarGroup[];
+  const groups = (groupsResult.data ?? []) as WarGroup[];
+  const members = ((membersResult.data ?? []) as WarPartyMember[]).filter((m) => !!m.profile);
 
-  const { data: partiesData } = await supabase
-    .from('war_parties')
-    .select('*')
-    .in('group_id', groups.map((g) => g.id))
-    .order('party_number');
+  let parties: WarParty[] = [];
+  if (groups.length > 0) {
+    const { data: partiesData } = await withDbTiming(
+      'GET',
+      `war_parties.byGroups groups=${groups.length}`,
+      () =>
+        supabase
+          .from('war_parties')
+          .select('*')
+          .in('group_id', groups.map((g) => g.id))
+          .order('party_number')
+    );
 
-  const parties = (partiesData ?? []) as WarParty[];
-
-  const { data: membersData } = await supabase
-    .from('war_party_members')
-    .select('*, profile:profiles(*)')
-    .eq('war_setup_id', setup.id)
-    .order('position');
-
-  const members = (membersData ?? []) as WarPartyMember[];
+    parties = (partiesData ?? []) as WarParty[];
+  }
   const substitutes = members.filter((m) => m.is_substitute);
 
   const groupsWithParties: GroupWithParties[] = groups.map((group) => {
@@ -102,19 +129,29 @@ export function useWarSetup(weekStart?: Date) {
   }, [weekStartStr]);
 
   const createSetup = async (createdBy: string) => {
-    const { data: existing } = await supabase
-      .from('war_setups')
-      .select('id')
-      .eq('week_start', weekStartStr)
-      .maybeSingle();
+    const { data: existing } = await withDbTiming(
+      'GET',
+      `war_setups.exists week=${weekStartStr}`,
+      () =>
+        supabase
+          .from('war_setups')
+          .select('id')
+          .eq('week_start', weekStartStr)
+          .maybeSingle()
+    );
 
     if (existing) { await fetchSetup(); return; }
 
-    const { data: setup, error: err } = await supabase
-      .from('war_setups')
-      .insert({ week_start: weekStartStr, created_by: createdBy })
-      .select()
-      .single();
+    const { data: setup, error: err } = await withDbTiming(
+      'POST',
+      `war_setups.create week=${weekStartStr}`,
+      () =>
+        supabase
+          .from('war_setups')
+          .insert({ week_start: weekStartStr, created_by: createdBy })
+          .select()
+          .single()
+    );
 
     if (err) { setError(err.message); return; }
     await fetchSetup();
@@ -122,33 +159,50 @@ export function useWarSetup(weekStart?: Date) {
   };
 
   const addGroup = async (setupId: string, groupNumber: number, name: string) => {
-    const { error: err } = await supabase
-      .from('war_groups')
-      .insert({ war_setup_id: setupId, group_number: groupNumber, name });
-    if (err) { setError(err.message); return; }
+    const { error: err } = await withDbTiming(
+      'POST',
+      `war_groups.add setup=${setupId} group=${groupNumber}`,
+      () => supabase.from('war_groups').insert({ war_setup_id: setupId, group_number: groupNumber, name })
+    );
+    const isDuplicateGroup = err?.code === '23505';
+    if (err && !isDuplicateGroup) { setError(err.message); return; }
 
-    const { data: newGroup } = await supabase
-      .from('war_groups')
-      .select('id')
-      .eq('war_setup_id', setupId)
-      .eq('group_number', groupNumber)
-      .single();
+    const { data: newGroup } = await withDbTiming(
+      'GET',
+      `war_groups.find setup=${setupId} group=${groupNumber}`,
+      () =>
+        supabase
+          .from('war_groups')
+          .select('id')
+          .eq('war_setup_id', setupId)
+          .eq('group_number', groupNumber)
+          .single()
+    );
 
     if (newGroup) {
-      for (let i = 1; i <= MAX_PARTIES_PER_GROUP; i++) {
-        await supabase
-          .from('war_parties')
-          .insert({ group_id: (newGroup as { id: string }).id, party_number: i });
-      }
+      const rows = Array.from({ length: MAX_PARTIES_PER_GROUP }, (_, index) => ({
+        group_id: (newGroup as { id: string }).id,
+        party_number: index + 1,
+      }));
+
+      await withDbTiming(
+        'POST',
+        `war_parties.ensureDefault group=${(newGroup as { id: string }).id}`,
+        () =>
+          supabase
+            .from('war_parties')
+            .upsert(rows, { onConflict: 'group_id,party_number', ignoreDuplicates: true })
+      );
     }
     await fetchSetup();
   };
 
   const deleteGroup = async (groupId: string) => {
-    const { error: err } = await supabase
-      .from('war_groups')
-      .delete()
-      .eq('id', groupId);
+    const { error: err } = await withDbTiming(
+      'DELETE',
+      `war_groups.delete group=${groupId}`,
+      () => supabase.from('war_groups').delete().eq('id', groupId)
+    );
 
     if (err) {
       setError(err.message);
@@ -165,31 +219,46 @@ export function useWarSetup(weekStart?: Date) {
     position: number,
     isSubstitute: boolean
   ) => {
-    await supabase
-      .from('war_party_members')
-      .delete()
-      .eq('war_setup_id', setupId)
-      .eq('user_id', userId);
+    await withDbTiming(
+      'DELETE',
+      `war_party_members.clear setup=${setupId} user=${userId}`,
+      () =>
+        supabase
+          .from('war_party_members')
+          .delete()
+          .eq('war_setup_id', setupId)
+          .eq('user_id', userId)
+    );
 
     if (partyId !== null || isSubstitute) {
-      const { error: err } = await supabase.from('war_party_members').insert({
-        war_setup_id: setupId,
-        user_id: userId,
-        party_id: partyId,
-        position,
-        is_substitute: isSubstitute,
-      });
+      const { error: err } = await withDbTiming(
+        'POST',
+        `war_party_members.assign setup=${setupId} user=${userId}`,
+        () =>
+          supabase.from('war_party_members').insert({
+            war_setup_id: setupId,
+            user_id: userId,
+            party_id: partyId,
+            position,
+            is_substitute: isSubstitute,
+          })
+      );
       if (err) setError(err.message);
     }
     await fetchSetup();
   };
 
   const removeMember = async (setupId: string, userId: string) => {
-    await supabase
-      .from('war_party_members')
-      .delete()
-      .eq('war_setup_id', setupId)
-      .eq('user_id', userId);
+    await withDbTiming(
+      'DELETE',
+      `war_party_members.remove setup=${setupId} user=${userId}`,
+      () =>
+        supabase
+          .from('war_party_members')
+          .delete()
+          .eq('war_setup_id', setupId)
+          .eq('user_id', userId)
+    );
     await fetchSetup();
   };
 
@@ -204,16 +273,26 @@ export function useWarSetup(weekStart?: Date) {
     position2: number,
     isSubstitute2: boolean
   ) => {
-    await supabase
-      .from('war_party_members')
-      .delete()
-      .eq('war_setup_id', setupId)
-      .in('user_id', [userId1, userId2]);
+    await withDbTiming(
+      'DELETE',
+      `war_party_members.swap.clear setup=${setupId} users=${userId1},${userId2}`,
+      () =>
+        supabase
+          .from('war_party_members')
+          .delete()
+          .eq('war_setup_id', setupId)
+          .in('user_id', [userId1, userId2])
+    );
 
-    const { error: err } = await supabase.from('war_party_members').insert([
-      { war_setup_id: setupId, user_id: userId1, party_id: partyId2, position: position2, is_substitute: isSubstitute2 },
-      { war_setup_id: setupId, user_id: userId2, party_id: partyId1, position: position1, is_substitute: isSubstitute1 },
-    ]);
+    const { error: err } = await withDbTiming(
+      'PUT',
+      `war_party_members.swap.insert setup=${setupId} users=${userId1},${userId2}`,
+      () =>
+        supabase.from('war_party_members').insert([
+          { war_setup_id: setupId, user_id: userId1, party_id: partyId2, position: position2, is_substitute: isSubstitute2 },
+          { war_setup_id: setupId, user_id: userId2, party_id: partyId1, position: position1, is_substitute: isSubstitute1 },
+        ])
+    );
     if (err) setError(err.message);
     await fetchSetup();
   };
