@@ -9,7 +9,8 @@ import type { Profile } from '../types';
 // were called inside useEffect, the second mount would wait 5000ms for the
 // IndexedDB auth lock held by the first call → visible F5 stall.
 // Both mounts now await the same already-resolved promise — zero lock contention.
-const _sessionPromise = supabase.auth.getSession();
+// Exported so main.tsx can chain pre-fetches off it without calling getSession() again.
+export const sessionPromise = supabase.auth.getSession();
 
 interface AuthState {
   user: User | null;
@@ -317,7 +318,7 @@ export function useAuth() {
 
     const initAuth = async () => {
       try {
-        const sessionResult = await _sessionPromise;
+        const sessionResult = await sessionPromise;
         const {
           data: { session },
         } = sessionResult;
