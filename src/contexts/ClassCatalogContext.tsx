@@ -44,10 +44,39 @@ function toUniqueCatalog(items: ClassCatalogItem[]) {
 
 const ClassCatalogContext = createContext<ClassCatalogContextValue | null>(null);
 
+const CLASS_CATALOG_STORAGE_KEY = 'gwm_class_catalog_v1';
+
+function readPersistedCatalog(): ClassCatalogItem[] | null {
+  try {
+    const raw = localStorage.getItem(CLASS_CATALOG_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ClassCatalogItem[];
+  } catch {
+    return null;
+  }
+}
+
+function persistCatalog(catalog: ClassCatalogItem[]) {
+  try {
+    localStorage.setItem(CLASS_CATALOG_STORAGE_KEY, JSON.stringify(catalog));
+  } catch { /* ignore quota errors */ }
+}
+
+// Module-level cache — survives re-mounts and tab switches within the same
+// page session. Falls back to localStorage so even page refreshes are instant.
+let cachedCatalog: ClassCatalogItem[] | null = readPersistedCatalog();
+
 export function ClassCatalogProvider({ children }: { children: ReactNode }) {
-  const [classCatalog, setClassCatalog] = useState<ClassCatalogItem[]>(DEFAULT_CLASS_CATALOG);
+  const [classCatalog, setClassCatalog] = useState<ClassCatalogItem[]>(
+    cachedCatalog ?? DEFAULT_CLASS_CATALOG
+  );
 
   const refreshClassCatalog = useCallback(async () => {
+    // Skip network call if already fetched this session.
+    if (cachedCatalog !== null) {
+      setClassCatalog(cachedCatalog);
+      return;
+    }
     const { data, error } = await supabase
       .from('class_catalog')
       .select('name,color_hex')
@@ -62,6 +91,8 @@ export function ClassCatalogProvider({ children }: { children: ReactNode }) {
       ...DEFAULT_CLASS_CATALOG,
       ...(data as ClassCatalogItem[]),
     ]);
+    cachedCatalog = mergedCatalog;
+    persistCatalog(mergedCatalog);
     setClassCatalog(mergedCatalog);
   }, []);
 
