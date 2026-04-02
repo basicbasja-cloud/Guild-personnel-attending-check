@@ -4,7 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { AppErrorBoundary } from './components/layout/AppErrorBoundary.tsx'
 import { supabase, supabaseConfigError } from './lib/supabase.ts'
-import { sessionPromise } from './hooks/useAuth.ts'
+import { readStoredUserId } from './hooks/useAuth.ts'
 import { formatISO, addDays, startOfDay, getDay } from 'date-fns'
 
 // Compute the current week string the same way useAttendance does.
@@ -15,15 +15,13 @@ function getWeekStr(): string {
 }
 
 const WEEK_ATTENDANCE_STORAGE_PREFIX = 'gwm_att_v1_';
-// Must match the keys used by useAuth and ClassCatalogContext.
 const PROFILE_CACHE_KEY = 'gwm_profile_cache_v1';
 const CLASS_CATALOG_STORAGE_KEY = 'gwm_class_catalog_v1';
 
 if (!supabaseConfigError) {
   const weekStr = getWeekStr();
 
-  // ── 1. Attendance pre-fetch (no auth needed — public RLS allows anon reads) ──
-  // Only pre-fetch if cache is missing or stale (>30s old).
+  // ── 1. Attendance pre-fetch ─────────────────────────────────────────────
   let needsAttFetch = true;
   try {
     const raw = localStorage.getItem(WEEK_ATTENDANCE_STORAGE_PREFIX + weekStr);
@@ -50,23 +48,21 @@ if (!supabaseConfigError) {
       });
   }
 
-  // ── 2. Profile + class_catalog pre-fetch (chain off already-hoisted session) ──
-  // sessionPromise is resolved before React even mounts (imported from useAuth).
-  // Chaining here means profile and class_catalog queries fire in parallel with
-  // the attendance fetch, before any component renders — so useAuth and
-  // ClassCatalogContext find warm cache on their first render and skip DB calls.
-  sessionPromise.then(({ data: { session } }) => {
-    if (!session?.user) return;
-    const userId = session.user.id;
+  // ── 2. Profile + class_catalog pre-fetch ───────────────────────────────
+  // readStoredUserId() reads the userId directly from the stored auth token
+  // (handles chunked storage introduced in @supabase/auth-js v2.64).
+  // This fires BEFORE React mounts and without waiting for getSession(),
+  // so useAuth finds a warm cache on first render instead of falling back
+  // to a fallback profile (is_management: false).
+  const storedUserId = readStoredUserId();
 
-    // Profile — only fetch if cache is missing (useAuth will still background-
-    // refresh to get the authoritative record, but won't show a loading spinner).
+  if (storedUserId) {
     const hasCachedProfile = (() => {
       try {
         const raw = localStorage.getItem(PROFILE_CACHE_KEY);
         if (!raw) return false;
         const p = JSON.parse(raw) as { id?: string };
-        return p?.id === userId;
+        return p?.id === storedUserId;
       } catch { return false; }
     })();
 
@@ -74,7 +70,7 @@ if (!supabaseConfigError) {
       supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('id', storedUserId)
         .maybeSingle()
         .then(({ data }) => {
           if (!data) return;
@@ -82,7 +78,6 @@ if (!supabaseConfigError) {
         });
     }
 
-    // Class catalog — only fetch if not already cached in localStorage.
     const hasCatalogCache = (() => {
       try { return !!localStorage.getItem(CLASS_CATALOG_STORAGE_KEY); } catch { return false; }
     })();
@@ -97,14 +92,11 @@ if (!supabaseConfigError) {
           try { localStorage.setItem(CLASS_CATALOG_STORAGE_KEY, JSON.stringify(data)); } catch { /* quota */ }
         });
     }
-  });
+  }
 
-  // ── 3. In-app keepalive: ping the DB every 4 minutes ──
-  // GitHub Actions scheduled crons delay 30-90 min on free repos.
+  // ── 3. In-app keepalive: ping every 4 minutes ──────────────────────────
   const dbPing = () => { supabase.from('profiles').select('id').limit(1).then(() => {}); };
   setInterval(dbPing, 4 * 60 * 1000);
-
-  // Ping immediately when the user returns to the tab after it was hidden.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') dbPing();
   });

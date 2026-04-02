@@ -124,7 +124,30 @@ function readBootstrapAuthSnapshot(): { user: User; session: Session } | null {
     const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
 
-    const parsed = JSON.parse(raw) as unknown;
+    // @supabase/auth-js ≥2.64 stores large sessions in chunks.
+    // The base key holds {"count":N}; the actual session is split across
+    // storageKey.0, storageKey.1, … up to N-1.
+    // Assemble the full JSON before trying to parse the session.
+    let sessionStr = raw;
+    try {
+      const meta = JSON.parse(raw) as unknown;
+      if (
+        meta !== null &&
+        typeof meta === 'object' &&
+        typeof (meta as { count?: unknown }).count === 'number'
+      ) {
+        const count = (meta as { count: number }).count;
+        let assembled = '';
+        for (let i = 0; i < count; i++) {
+          const chunk = localStorage.getItem(`${storageKey}.${i}`);
+          if (!chunk) return null; // incomplete — let the SDK handle it
+          assembled += chunk;
+        }
+        sessionStr = assembled;
+      }
+    } catch { /* raw was not JSON or not the chunk-count format — use as-is */ }
+
+    const parsed = JSON.parse(sessionStr) as unknown;
     if (!parsed || typeof parsed !== 'object') return null;
 
     const maybeSession = (
@@ -156,6 +179,13 @@ function readBootstrapAuthSnapshot(): { user: User; session: Session } | null {
   } catch {
     return null;
   }
+}
+
+// Exported so main.tsx can read the userId from storage at module load time
+// without re-calling getSession() (which would cause lock contention).
+export function readStoredUserId(): string | null {
+  const snap = readBootstrapAuthSnapshot();
+  return snap?.user?.id ?? null;
 }
 
 export function useAuth() {
