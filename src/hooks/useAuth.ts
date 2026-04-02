@@ -1,7 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { withDbTiming } from '../lib/dbTiming';
 import type { Profile } from '../types';
+
+// Hoist getSession() to module level so it runs ONCE at import time, before
+// React mounts. React StrictMode double-mounts useEffect twice; if getSession()
+// were called inside useEffect, the second mount would wait 5000ms for the
+// IndexedDB auth lock held by the first call → visible F5 stall.
+// Both mounts now await the same already-resolved promise — zero lock contention.
+const _sessionPromise = supabase.auth.getSession();
 
 interface AuthState {
   user: User | null;
@@ -40,7 +48,7 @@ async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs = 10000): Promi
 }
 
 const AUTH_INIT_TIMEOUT_MS = 12000;
-const PROFILE_REQUEST_TIMEOUT_MS = 2500;
+const PROFILE_REQUEST_TIMEOUT_MS = 7000;
 const PROFILE_CACHE_KEY = 'gwm_profile_cache_v1';
 
 function getSupabaseAuthStorageKey() {
@@ -151,38 +159,55 @@ function readBootstrapAuthSnapshot(): { user: User; session: Session } | null {
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>(() => {
+    // Fast path: full Supabase session found in localStorage.
     const bootstrapAuth = readBootstrapAuthSnapshot();
-
-    if (!bootstrapAuth) {
+    if (bootstrapAuth) {
+      const cachedProfile = readCachedProfile(bootstrapAuth.user.id);
       return {
-        user: null,
-        session: null,
-        profile: null,
-        loading: true,
+        user: bootstrapAuth.user,
+        session: bootstrapAuth.session,
+        profile: cachedProfile ?? buildFallbackProfile(bootstrapAuth.user),
+        loading: false,
         error: null,
       };
     }
 
-    const cachedProfile = readCachedProfile(bootstrapAuth.user.id);
+    // Fallback: bootstrap snapshot failed (expired access token that needs a
+    // network refresh, SDK storage key change, private-mode quirk, etc.).
+    // If a cached profile exists, show the app immediately with no loading
+    // screen. initAuth() will validate/replace the session asynchronously
+    // and redirect to login only if the session is truly gone.
+    try {
+      const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+      if (raw) {
+        const cachedProfile = JSON.parse(raw) as Profile;
+        if (cachedProfile?.id) {
+          const syntheticUser = { id: cachedProfile.id } as User;
+          return {
+            user: syntheticUser,
+            session: null,
+            profile: cachedProfile,
+            loading: false,
+            error: null,
+          };
+        }
+      }
+    } catch { /* ignore storage errors */ }
 
-    return {
-      user: bootstrapAuth.user,
-      session: bootstrapAuth.session,
-      profile: cachedProfile ?? buildFallbackProfile(bootstrapAuth.user),
-      loading: false,
-      error: null,
-    };
+    return { user: null, session: null, profile: null, loading: true, error: null };
   });
 
   const fetchProfile = useCallback(async (userId: string): Promise<ProfileFetchResult> => {
     try {
       const result = await withTimeout(
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single()
-          .then((r) => r as { data: Profile | null; error: { message: string; code?: string } | null }),
+        withDbTiming('GET', `profiles.fetch user=${userId}`, () =>
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle()
+            .then((r) => r as { data: Profile | null; error: { message: string; code?: string } | null })
+        ),
         PROFILE_REQUEST_TIMEOUT_MS
       );
 
@@ -190,14 +215,16 @@ export function useAuth() {
         return { profile: result.data as Profile, shouldUpsert: false };
       }
 
-      // PGRST116 means no rows for .single(); this is the case where we should create profile.
-      if (result.error?.code === 'PGRST116') {
+      // If there is no row yet, create one via upsert.
+      if (!result.error && !result.data) {
         return { profile: null, shouldUpsert: true };
       }
 
       return { profile: null, shouldUpsert: false };
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      if (!(error instanceof Error && error.message.includes('Request timed out'))) {
+        console.warn('Profile fetch failed; continuing with cached/fallback profile.');
+      }
       return { profile: null, shouldUpsert: false };
     }
   }, []);
@@ -213,21 +240,23 @@ export function useAuth() {
 
     try {
       const result = await withTimeout(
-        supabase
-          .from('profiles')
-          .upsert(
-            {
-              id: user.id,
-              discord_id: discordId ?? '',
-              username,
-              avatar_url: avatarUrl ?? null,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'id' }
-          )
-          .select()
-          .single()
-          .then((r) => r as { data: Profile | null; error: { message: string } | null }),
+        withDbTiming('PUT', `profiles.upsert user=${user.id}`, () =>
+          supabase
+            .from('profiles')
+            .upsert(
+              {
+                id: user.id,
+                discord_id: discordId ?? '',
+                username,
+                avatar_url: avatarUrl ?? null,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            )
+            .select()
+            .single()
+            .then((r) => r as { data: Profile | null; error: { message: string } | null })
+        ),
         PROFILE_REQUEST_TIMEOUT_MS
       );
 
@@ -256,8 +285,8 @@ export function useAuth() {
     return null;
   }, [fetchProfile, upsertProfile]);
 
-  const loadProfileForSessionUserWithRetry = useCallback(async (user: User, attempts = 4) => {
-    const retryDelaysMs = [300, 700, 1500];
+  const loadProfileForSessionUserWithRetry = useCallback(async (user: User, attempts = 2) => {
+    const retryDelaysMs = [500];
 
     for (let i = 0; i < attempts; i += 1) {
       const profile = await loadProfileForSessionUser(user);
@@ -288,7 +317,7 @@ export function useAuth() {
 
     const initAuth = async () => {
       try {
-        const sessionResult = await supabase.auth.getSession();
+        const sessionResult = await _sessionPromise;
         const {
           data: { session },
         } = sessionResult;
@@ -333,7 +362,9 @@ export function useAuth() {
             setState((s) => ({ ...s, user: session.user, session, profile, loading: false, error: null }));
           })();
         } else {
-          setState((s) => ({ ...s, loading: false, error: callbackError }));
+          // No valid session — clear any synthetic user/profile that was
+          // pre-loaded from the profile cache, then show the login screen.
+          setState({ user: null, session: null, profile: null, loading: false, error: callbackError });
         }
       } catch (error) {
         if (!mounted) return;
@@ -348,11 +379,23 @@ export function useAuth() {
     initAuth();
 
     const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         if (!mounted) return;
+
+        // INITIAL_SESSION is handled by initAuth() above — skip to avoid
+        // firing a duplicate profile fetch at startup.
+        // TOKEN_REFRESHED only changes the access token — no need to re-fetch
+        // the profile, just update the session in state.
+        if (event === 'INITIAL_SESSION') return;
+
         if (session?.user) {
+          if (event === 'TOKEN_REFRESHED') {
+            setState((s) => s.profile ? { ...s, session } : s);
+            return;
+          }
+
           const cachedProfile = readCachedProfile(session.user.id);
           if (cachedProfile) {
             setState({ user: session.user, session, profile: cachedProfile, loading: false, error: null });
