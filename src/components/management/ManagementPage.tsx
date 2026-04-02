@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { format, addWeeks } from 'date-fns';
 import {
   DndContext,
@@ -17,6 +17,7 @@ import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
 import type { Profile } from '../../types';
 import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS } from '../../types';
+import { useClassCatalog } from '../../contexts/ClassCatalogContext';
 
 interface ManagementPageProps {
   userId: string;
@@ -38,6 +39,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
   const { weekAttendances, currentWeekStart } = useAttendance(null, targetWeek);
   const war = useWarSetup(targetWeek);
+  const { getClassColor } = useClassCatalog();
 
   const [activeDrag, setActiveDrag] = useState<ActiveDragData | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
@@ -74,6 +76,23 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   const activeAssignedCount = war.data
     ? war.data.groups.reduce((sum, g) => sum + g.parties.reduce((s, p) => s + p.members.length, 0), 0)
     : 0;
+
+  // Class distribution across all assigned members (parties + substitutes)
+  const classDistribution = useMemo(() => {
+    if (!war.data) return [];
+    const counts = new Map<string, number>();
+    const allMembers = [
+      ...war.data.groups.flatMap((g) => g.parties.flatMap((p) => p.members)),
+      ...war.data.substitutes,
+    ];
+    for (const m of allMembers) {
+      const cls = m.profile?.character_class ?? 'Unknown';
+      counts.set(cls, (counts.get(cls) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([cls, count]) => ({ cls, count }));
+  }, [war.data]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     if (!canEdit) return;
@@ -284,7 +303,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         )}
 
         {/* Stats bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <StatCard
             label="Available"
             value={weekAttendances.filter((a) => a.status === 'join' || a.status === 'maybe').length}
@@ -299,6 +318,12 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
             color="amber"
           />
         </div>
+
+        {/* Class distribution — only shown when a setup exists with members assigned */}
+        {classDistribution.length > 0 && (
+          <ClassDistributionCard distribution={classDistribution} getClassColor={getClassColor} />
+        )}
+        {classDistribution.length > 0 && <div className="mb-6" />}
 
         {!war.data ? (
           <div className="text-center py-20">
@@ -377,11 +402,13 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
               {/* Substitutes */}
               <SubstituteBoard
-                substitutes={war.data.substitutes.map((s) => ({
-                  userId: s.user_id,
-                  profile: s.profile!,
-                  position: s.position,
-                }))}
+                substitutes={war.data.substitutes
+                  .filter((s) => !!s.profile)
+                  .map((s) => ({
+                    userId: s.user_id,
+                    profile: s.profile as Profile,
+                    position: s.position,
+                  }))}
                 maxSubstitutes={MAX_SUBSTITUTE_MEMBERS}
                 onRemoveMember={handleRemoveMember}
                 maybeUserIds={maybeUserIds}
@@ -445,6 +472,56 @@ function AvailablePanel({ members, maybeUserIds, canEdit }: { members: Profile[]
             />
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+interface ClassDistributionCardProps {
+  distribution: { cls: string; count: number }[];
+  getClassColor: (cls: string | null | undefined) => string;
+}
+
+function ClassDistributionCard({ distribution, getClassColor }: ClassDistributionCardProps) {
+  const total = distribution.reduce((s, d) => s + d.count, 0);
+  return (
+    <div className="bg-slate-900/60 rounded-xl border border-slate-700 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-white font-semibold text-sm">Class Distribution</h4>
+        <span className="text-slate-400 text-xs">{total} assigned</span>
+      </div>
+
+      {/* Bar chart row */}
+      <div className="flex h-3 rounded-full overflow-hidden mb-3 gap-px">
+        {distribution.map(({ cls, count }) => {
+          const pct = total > 0 ? (count / total) * 100 : 0;
+          const color = getClassColor(cls);
+          return (
+            <div
+              key={cls}
+              title={`${cls}: ${count}`}
+              style={{ width: `${pct}%`, backgroundColor: color }}
+              className="transition-all"
+            />
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {distribution.map(({ cls, count }) => {
+          const color = getClassColor(cls);
+          return (
+            <div key={cls} className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                style={{ backgroundColor: color }}
+              />
+              <span className="text-slate-300 text-xs truncate">{cls}</span>
+              <span className="text-slate-500 text-xs font-medium">{count}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
