@@ -37,7 +37,7 @@ export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, ca
             partyId={party.id}
             groupId={groupId}
             position={position}
-            member={member ? { userId: member.user_id, profile: member.profile! } : null}
+            member={member && member.profile ? { userId: member.user_id, profile: member.profile } : null}
             isMaybe={member ? maybeUserIds.has(member.user_id) : false}
             onRemove={() => member && onRemoveMember(member.user_id)}
             canEdit={canEdit}

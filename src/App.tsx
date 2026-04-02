@@ -8,6 +8,7 @@ import { AttendanceList } from './components/management/AttendanceList';
 import { AdminModePage } from './components/management/AdminModePage';
 import { useAttendance } from './hooks/useAttendance';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
+import { supabaseConfigError } from './lib/supabase';
 
 type Tab = 'attendance' | 'management' | 'roster' | 'admin';
 
@@ -15,17 +16,34 @@ function AppContent() {
   const auth = useAuth();
   const [tab, setTab] = useState<Tab>('attendance');
   const isTestGoogleLoginEnabled = import.meta.env.VITE_ENABLE_TEST_GOOGLE_LOGIN === 'true';
+  const isRosterActive = tab === 'roster';
+  const shouldLoadRosterAttendance = isRosterActive && !!auth.profile?.is_management;
 
   const { weekAttendances, weekStartStr } = useAttendance(
-    auth.profile?.is_management ? null : null
+    null,
+    undefined,
+    shouldLoadRosterAttendance
   );
 
   if (auth.loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-4" />
-          <p className="text-slate-400">Loading…</p>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="text-center max-w-xs">
+          {/* Icon */}
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-indigo-600 mb-6 shadow-lg shadow-indigo-900/50">
+            <span className="text-4xl">⚔️</span>
+          </div>
+
+          <h1 className="text-2xl font-bold text-white mb-1">Guild War Manager</h1>
+          <p className="text-slate-400 text-sm mb-8">Attendance check &amp; party organizer</p>
+
+          {/* Animated bar */}
+          <div className="w-48 mx-auto h-1 bg-slate-800 rounded-full overflow-hidden mb-4">
+            <div className="h-full bg-indigo-500 rounded-full animate-[loading-bar_1.8s_ease-in-out_infinite]" />
+          </div>
+
+          <p className="text-slate-400 text-sm">Connecting to server…</p>
+          <p className="text-slate-600 text-xs mt-1">First load may take a few seconds</p>
         </div>
       </div>
     );
@@ -106,5 +124,18 @@ function AppContent() {
 }
 
 export default function App() {
+  if (supabaseConfigError) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+        <div className="max-w-xl w-full bg-slate-900 border border-red-700/60 rounded-2xl p-6">
+          <h1 className="text-xl font-bold text-red-300 mb-2">Configuration Error</h1>
+          <p className="text-slate-300 text-sm mb-3">The app cannot connect to Supabase.</p>
+          <p className="text-slate-400 text-sm mb-3">{supabaseConfigError}</p>
+          <p className="text-slate-500 text-xs">If you are on GitHub Pages, redeploy with environment variables configured for this target.</p>
+        </div>
+      </div>
+    );
+  }
+
   return <AppContent />;
 }

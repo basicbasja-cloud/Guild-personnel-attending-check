@@ -40,7 +40,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
   const { classCatalog, getClassColor } = useClassCatalog();
   const [weekOffset, setWeekOffset] = useState(0);
   const targetWeek = weekOffset === 0 ? undefined : addWeeks(new Date(), weekOffset);
-  const { attendance, loading, error, setStatus, currentWeekStart } = useAttendance(
+  const { attendance, submitting, error, setStatus, currentWeekStart } = useAttendance(
     profile.id,
     targetWeek
   );
@@ -113,7 +113,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
                 <button
                   key={status}
                   onClick={() => handleStatusSelect(status)}
-                  disabled={loading}
+                  disabled={submitting}
                   className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all
                     ${selected ? `${cfg.bg} ${cfg.border}` : 'bg-slate-800 border-slate-600 hover:border-slate-500'}
                     disabled:opacity-50 disabled:cursor-not-allowed`}
