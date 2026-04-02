@@ -37,11 +37,11 @@ export function Header({ profile, onSignOut }: HeaderProps) {
               </p>
             )}
           </div>
-          {profile.is_management && (
+          {profile.is_management ? (
             <span className="bg-indigo-700 text-indigo-100 text-xs px-2 py-0.5 rounded-full font-medium">
               GM
             </span>
-          )}
+          ) : null}
           <button
             onClick={onSignOut}
             className="text-slate-400 hover:text-white text-sm px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors"

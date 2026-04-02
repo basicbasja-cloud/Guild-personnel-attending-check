@@ -11,23 +11,195 @@ interface AuthState {
   error: string | null;
 }
 
-export function useAuth() {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    session: null,
-    profile: null,
-    loading: true,
-    error: null,
+function getAuthCallbackError() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+
+  for (const params of [searchParams, hashParams]) {
+    const error = params.get('error');
+    const description = params.get('error_description');
+
+    if (error || description) {
+      return description ?? error ?? 'Authentication failed.';
+    }
+  }
+
+  if (searchParams.get('code')) {
+    return 'OAuth returned successfully, but no Supabase session was created. Check Supabase Auth signup settings, provider credentials, and callback configuration.';
+  }
+
+  return null;
+}
+
+async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs = 10000): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Request timed out.')), timeoutMs);
   });
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    if (error) return null;
-    return data as Profile;
+  return Promise.race([promise, timeoutPromise]);
+}
+
+const AUTH_INIT_TIMEOUT_MS = 12000;
+const PROFILE_REQUEST_TIMEOUT_MS = 2500;
+const PROFILE_CACHE_KEY = 'gwm_profile_cache_v1';
+
+function getSupabaseAuthStorageKey() {
+  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  if (!url) return null;
+
+  try {
+    const projectRef = new URL(url).hostname.split('.')[0];
+    return `sb-${projectRef}-auth-token`;
+  } catch {
+    return null;
+  }
+}
+
+function readCachedProfile(userId: string): Profile | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Profile;
+    if (!parsed || parsed.id !== userId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedProfile(profile: Profile) {
+  try {
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+  } catch {
+    // Ignore storage errors (private mode/quota) and continue.
+  }
+}
+
+function buildFallbackProfile(user: User): Profile {
+  const username =
+    (user.user_metadata?.full_name as string | undefined) ||
+    (user.user_metadata?.name as string | undefined) ||
+    user.email ||
+    'Unknown';
+  const nowIso = new Date().toISOString();
+
+  return {
+    id: user.id,
+    discord_id: (user.user_metadata?.provider_id as string | undefined) ?? '',
+    username,
+    avatar_url: (user.user_metadata?.avatar_url as string | undefined) ?? null,
+    character_name: null,
+    character_class: null,
+    is_management: false,
+    is_admin: false,
+    created_at: nowIso,
+  };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface ProfileFetchResult {
+  profile: Profile | null;
+  shouldUpsert: boolean;
+}
+
+function readBootstrapAuthSnapshot(): { user: User; session: Session } | null {
+  if (typeof window === 'undefined') return null;
+
+  const storageKey = getSupabaseAuthStorageKey();
+  if (!storageKey) return null;
+
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const maybeSession = (
+      (parsed as { currentSession?: unknown }).currentSession ??
+      (parsed as { session?: unknown }).session ??
+      parsed
+    ) as Partial<Session> | null;
+
+    if (!maybeSession || typeof maybeSession !== 'object' || !('access_token' in maybeSession)) {
+      return null;
+    }
+
+    let user = maybeSession.user as User | undefined;
+
+    if (!user) {
+      const rawUser = localStorage.getItem(`${storageKey}-user`);
+      if (rawUser) {
+        const parsedUser = JSON.parse(rawUser) as { user?: User } | User;
+        user = (parsedUser as { user?: User }).user ?? (parsedUser as User);
+      }
+    }
+
+    if (!user || !user.id) return null;
+
+    return {
+      user,
+      session: maybeSession as Session,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function useAuth() {
+  const [state, setState] = useState<AuthState>(() => {
+    const bootstrapAuth = readBootstrapAuthSnapshot();
+
+    if (!bootstrapAuth) {
+      return {
+        user: null,
+        session: null,
+        profile: null,
+        loading: true,
+        error: null,
+      };
+    }
+
+    const cachedProfile = readCachedProfile(bootstrapAuth.user.id);
+
+    return {
+      user: bootstrapAuth.user,
+      session: bootstrapAuth.session,
+      profile: cachedProfile ?? buildFallbackProfile(bootstrapAuth.user),
+      loading: false,
+      error: null,
+    };
+  });
+
+  const fetchProfile = useCallback(async (userId: string): Promise<ProfileFetchResult> => {
+    try {
+      const result = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single()
+          .then((r) => r as { data: Profile | null; error: { message: string; code?: string } | null }),
+        PROFILE_REQUEST_TIMEOUT_MS
+      );
+
+      if (!result.error && result.data) {
+        return { profile: result.data as Profile, shouldUpsert: false };
+      }
+
+      // PGRST116 means no rows for .single(); this is the case where we should create profile.
+      if (result.error?.code === 'PGRST116') {
+        return { profile: null, shouldUpsert: true };
+      }
+
+      return { profile: null, shouldUpsert: false };
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      return { profile: null, shouldUpsert: false };
+    }
   }, []);
 
   const upsertProfile = useCallback(async (user: User) => {
@@ -39,84 +211,187 @@ export function useAuth() {
       'Unknown';
     const avatarUrl = user.user_metadata?.avatar_url as string | undefined;
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: user.id,
-          discord_id: discordId ?? '',
-          username,
-          avatar_url: avatarUrl ?? null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      )
-      .select()
-      .single();
+    try {
+      const result = await withTimeout(
+        supabase
+          .from('profiles')
+          .upsert(
+            {
+              id: user.id,
+              discord_id: discordId ?? '',
+              username,
+              avatar_url: avatarUrl ?? null,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          )
+          .select()
+          .single()
+          .then((r) => r as { data: Profile | null; error: { message: string } | null }),
+        PROFILE_REQUEST_TIMEOUT_MS
+      );
 
-    if (error) {
+      if (result.error) {
+        console.error('Error upserting profile:', result.error);
+        return null;
+      }
+      if (result.data) {
+        writeCachedProfile(result.data as Profile);
+      }
+      return result.data as Profile;
+    } catch (error) {
       console.error('Error upserting profile:', error);
       return null;
     }
-    return data as Profile;
   }, []);
 
-  // Safety timeout: if onAuthStateChange never fires (e.g. token refresh
-  // hangs on a slow or restricted network), force loading to false after
-  // AUTH_TIMEOUT_MS so the user sees the login page instead of a stuck spinner.
-  // 3 s is enough for a healthy connection while still being quick to fall back
-  // on PC browsers where Supabase requests can be blocked or throttled.
-  const AUTH_TIMEOUT_MS = 3000;
+  const loadProfileForSessionUser = useCallback(async (user: User) => {
+    const fetched = await fetchProfile(user.id);
+    if (fetched.profile) return fetched.profile;
+
+    if (fetched.shouldUpsert) {
+      return upsertProfile(user);
+    }
+
+    return null;
+  }, [fetchProfile, upsertProfile]);
+
+  const loadProfileForSessionUserWithRetry = useCallback(async (user: User, attempts = 4) => {
+    const retryDelaysMs = [300, 700, 1500];
+
+    for (let i = 0; i < attempts; i += 1) {
+      const profile = await loadProfileForSessionUser(user);
+      if (profile) return profile;
+
+      const isLastAttempt = i === attempts - 1;
+      if (!isLastAttempt) {
+        await sleep(retryDelaysMs[i] ?? 1500);
+      }
+    }
+
+    return null;
+  }, [loadProfileForSessionUser]);
 
   useEffect(() => {
     let mounted = true;
+    const loadingWatchdog = setTimeout(() => {
+      if (!mounted) return;
+      setState((s) => {
+        if (!s.loading) return s;
+        return {
+          ...s,
+          loading: false,
+          error: 'Authentication restore is slow on this browser. Please sign in again if needed.',
+        };
+      });
+    }, AUTH_INIT_TIMEOUT_MS + 1000);
 
-    const timeoutId = setTimeout(() => {
-      if (mounted) {
-        setState((s) => (s.loading ? { ...s, loading: false } : s));
+    const initAuth = async () => {
+      try {
+        const sessionResult = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = sessionResult;
+        const callbackError = getAuthCallbackError();
+
+        if (!mounted) return;
+
+        if (session?.user) {
+          const cachedProfile = readCachedProfile(session.user.id);
+          if (cachedProfile) {
+            setState({ user: session.user, session, profile: cachedProfile, loading: false, error: null });
+            void (async () => {
+              const freshProfile = await loadProfileForSessionUserWithRetry(session.user);
+              if (!mounted) return;
+              if (!freshProfile) {
+                setState((s) => ({
+                  ...s,
+                  error: 'Profile sync is delayed. You can continue, and it will retry automatically.',
+                }));
+                return;
+              }
+              writeCachedProfile(freshProfile);
+              setState((s) => ({ ...s, user: session.user, session, profile: freshProfile, loading: false, error: null }));
+            })();
+            return;
+          }
+
+          const fallbackProfile = buildFallbackProfile(session.user);
+          setState({ user: session.user, session, profile: fallbackProfile, loading: false, error: null });
+
+          void (async () => {
+            const profile = await loadProfileForSessionUserWithRetry(session.user);
+            if (!mounted) return;
+            if (!profile) {
+              setState((s) => ({
+                ...s,
+                error: 'Profile sync is delayed. You can continue, and it will retry automatically.',
+              }));
+              return;
+            }
+            writeCachedProfile(profile);
+            setState((s) => ({ ...s, user: session.user, session, profile, loading: false, error: null }));
+          })();
+        } else {
+          setState((s) => ({ ...s, loading: false, error: callbackError }));
+        }
+      } catch (error) {
+        if (!mounted) return;
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: error instanceof Error ? error.message : 'Failed to initialize authentication.',
+        }));
       }
-    }, AUTH_TIMEOUT_MS);
+    };
 
-    // onAuthStateChange fires INITIAL_SESSION immediately on mount with the
-    // cached session, so we no longer need a separate getSession() call.
-    // Removing the duplicate avoids fetching the profile twice on page load,
-    // which was the primary cause of the slow initial render.
+    initAuth();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return;
       try {
+        if (!mounted) return;
         if (session?.user) {
-          const profile =
-            (await fetchProfile(session.user.id)) ||
-            (await upsertProfile(session.user));
-          if (mounted) {
-            setState({ user: session.user, session, profile, loading: false, error: null });
+          const cachedProfile = readCachedProfile(session.user.id);
+          if (cachedProfile) {
+            setState({ user: session.user, session, profile: cachedProfile, loading: false, error: null });
+          } else {
+            setState({ user: session.user, session, profile: buildFallbackProfile(session.user), loading: false, error: null });
           }
+
+          const profile = await loadProfileForSessionUserWithRetry(session.user);
+          if (!mounted) return;
+          if (!profile) {
+            setState((s) => ({
+              ...s,
+              error: 'Profile sync is delayed. You can continue, and it will retry automatically.',
+            }));
+            return;
+          }
+          writeCachedProfile(profile);
+          setState({ user: session.user, session, profile, loading: false, error: null });
         } else {
-          if (mounted) {
-            setState({ user: null, session: null, profile: null, loading: false, error: null });
-          }
+          setState({ user: null, session: null, profile: null, loading: false, error: null });
         }
-      } catch (err) {
-        // If profile fetch/upsert throws (e.g. network error), ensure loading
-        // is always cleared so users are never permanently stuck on the spinner.
-        if (mounted) {
-          setState((s) => ({
-            ...s,
-            loading: false,
-            error: err instanceof Error ? err.message : 'Unexpected error during sign-in',
-          }));
-        }
+      } catch (error) {
+        if (!mounted) return;
+        setState({
+          user: null,
+          session: null,
+          profile: null,
+          loading: false,
+          error: error instanceof Error ? error.message : 'Authentication state change failed.',
+        });
       }
     });
 
     return () => {
       mounted = false;
-      clearTimeout(timeoutId);
+      clearTimeout(loadingWatchdog);
       subscription.unsubscribe();
     };
-  }, [fetchProfile, upsertProfile]);
+  }, [fetchProfile, upsertProfile, loadProfileForSessionUser, loadProfileForSessionUserWithRetry]);
 
   const signInWithDiscord = async () => {
     setState((s) => ({ ...s, error: null }));
@@ -128,8 +403,27 @@ export function useAuth() {
     if (error) setState((s) => ({ ...s, error: error.message }));
   };
 
+  const signInWithGoogle = async () => {
+    setState((s) => ({ ...s, error: null }));
+
+    // Keep Google auth disabled unless explicitly turned on for test usage.
+    if (import.meta.env.VITE_ENABLE_TEST_GOOGLE_LOGIN !== 'true') {
+      setState((s) => ({ ...s, error: 'Google login is disabled outside test environment.' }));
+      return;
+    }
+
+    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+
+    if (error) setState((s) => ({ ...s, error: error.message }));
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem(PROFILE_CACHE_KEY);
   };
 
   const updateProfile = async (updates: Partial<Pick<Profile, 'character_name' | 'character_class'>>) => {
@@ -141,21 +435,11 @@ export function useAuth() {
       .select()
       .single();
     if (!error && data) {
+      writeCachedProfile(data as Profile);
       setState((s) => ({ ...s, profile: data as Profile }));
     }
     return error;
   };
 
-  const setAdminPin = async (pin: string): Promise<string | null> => {
-    const { error } = await supabase.rpc('set_admin_pin', { pin });
-    return error ? error.message : null;
-  };
-
-  const verifyAdminPin = async (pin: string): Promise<boolean> => {
-    const { data, error } = await supabase.rpc('verify_admin_pin', { pin });
-    if (error) return false;
-    return data === true;
-  };
-
-  return { ...state, signInWithDiscord, signOut, updateProfile, setAdminPin, verifyAdminPin };
+  return { ...state, signInWithDiscord, signInWithGoogle, signOut, updateProfile };
 }

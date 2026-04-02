@@ -1,12 +1,7 @@
 -- Guild War Manager – Supabase Database Schema
 -- Run this in your Supabase SQL editor (Dashboard → SQL Editor → New query)
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 0. EXTENSIONS
--- ─────────────────────────────────────────────────────────────────────────────
--- pgcrypto provides crypt(), gen_salt(), digest(), etc.
--- Required for admin PIN hashing.
-create extension if not exists pgcrypto with schema extensions;
+create extension if not exists pgcrypto;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. PROFILES
@@ -20,24 +15,39 @@ create table if not exists public.profiles (
   character_name  text,
   character_class text,
   is_management   boolean not null default false,
-  admin_pin_hash  text,     -- bcrypt hash of the management PIN (null = no PIN set)
+  is_admin        boolean not null default false,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
 
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+
 alter table public.profiles enable row level security;
 
 -- Everyone can read all profiles (needed for party builder)
+drop policy if exists "profiles_select_all" on public.profiles;
 create policy "profiles_select_all"
   on public.profiles for select using (true);
 
--- Users can only update their own profile
-create policy "profiles_update_own"
-  on public.profiles for update using (auth.uid() = id);
+-- Users can update their own profile, and admins can update any profile.
+-- Single policy avoids multiple permissive UPDATE policy overhead.
+drop policy if exists "profiles_update_own" on public.profiles;
+drop policy if exists "profiles_update_admin" on public.profiles;
+drop policy if exists "profiles_update_own_or_admin" on public.profiles;
+create policy "profiles_update_own_or_admin"
+  on public.profiles for update
+  using (
+    (select auth.uid()) = id
+    or exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and is_admin = true
+    )
+  );
 
 -- Users can insert their own profile (handled by upsert on sign-in)
+drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own"
-  on public.profiles for insert with check (auth.uid() = id);
+  on public.profiles for insert with check ((select auth.uid()) = id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. ATTENDANCE
@@ -56,18 +66,22 @@ create table if not exists public.attendance (
 alter table public.attendance enable row level security;
 
 -- Anyone authenticated can read attendance (management needs it)
+drop policy if exists "attendance_select_auth" on public.attendance;
 create policy "attendance_select_auth"
-  on public.attendance for select using (auth.role() = 'authenticated');
+  on public.attendance for select using ((select auth.role()) = 'authenticated');
 
 -- Users manage their own attendance rows
+drop policy if exists "attendance_insert_own" on public.attendance;
 create policy "attendance_insert_own"
-  on public.attendance for insert with check (auth.uid() = user_id);
+  on public.attendance for insert with check ((select auth.uid()) = user_id);
 
+drop policy if exists "attendance_update_own" on public.attendance;
 create policy "attendance_update_own"
-  on public.attendance for update using (auth.uid() = user_id);
+  on public.attendance for update using ((select auth.uid()) = user_id);
 
+drop policy if exists "attendance_delete_own" on public.attendance;
 create policy "attendance_delete_own"
-  on public.attendance for delete using (auth.uid() = user_id);
+  on public.attendance for delete using ((select auth.uid()) = user_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. WAR SETUPS
@@ -83,25 +97,28 @@ create table if not exists public.war_setups (
 
 alter table public.war_setups enable row level security;
 
+drop policy if exists "war_setups_select_auth" on public.war_setups;
 create policy "war_setups_select_auth"
-  on public.war_setups for select using (auth.role() = 'authenticated');
+  on public.war_setups for select using ((select auth.role()) = 'authenticated');
 
 -- Only management can create/modify war setups
+drop policy if exists "war_setups_insert_mgmt" on public.war_setups;
 create policy "war_setups_insert_mgmt"
   on public.war_setups for insert
   with check (
     exists (
       select 1 from public.profiles
-      where id = auth.uid() and is_management = true
+      where id = (select auth.uid()) and is_management = true
     )
   );
 
+drop policy if exists "war_setups_update_mgmt" on public.war_setups;
 create policy "war_setups_update_mgmt"
   on public.war_setups for update
   using (
     exists (
       select 1 from public.profiles
-      where id = auth.uid() and is_management = true
+      where id = (select auth.uid()) and is_management = true
     )
   );
 
@@ -120,19 +137,22 @@ create table if not exists public.war_groups (
 
 alter table public.war_groups enable row level security;
 
+drop policy if exists "war_groups_select_auth" on public.war_groups;
 create policy "war_groups_select_auth"
-  on public.war_groups for select using (auth.role() = 'authenticated');
+  on public.war_groups for select using ((select auth.role()) = 'authenticated');
 
+drop policy if exists "war_groups_insert_mgmt" on public.war_groups;
 create policy "war_groups_insert_mgmt"
   on public.war_groups for insert
   with check (
-    exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
 
+drop policy if exists "war_groups_delete_mgmt" on public.war_groups;
 create policy "war_groups_delete_mgmt"
   on public.war_groups for delete
   using (
-    exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -149,19 +169,22 @@ create table if not exists public.war_parties (
 
 alter table public.war_parties enable row level security;
 
+drop policy if exists "war_parties_select_auth" on public.war_parties;
 create policy "war_parties_select_auth"
-  on public.war_parties for select using (auth.role() = 'authenticated');
+  on public.war_parties for select using ((select auth.role()) = 'authenticated');
 
+drop policy if exists "war_parties_insert_mgmt" on public.war_parties;
 create policy "war_parties_insert_mgmt"
   on public.war_parties for insert
   with check (
-    exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
 
+drop policy if exists "war_parties_delete_mgmt" on public.war_parties;
 create policy "war_parties_delete_mgmt"
   on public.war_parties for delete
   using (
-    exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -181,115 +204,258 @@ create table if not exists public.war_party_members (
 
 alter table public.war_party_members enable row level security;
 
+drop policy if exists "war_party_members_select_auth" on public.war_party_members;
 create policy "war_party_members_select_auth"
-  on public.war_party_members for select using (auth.role() = 'authenticated');
+  on public.war_party_members for select using ((select auth.role()) = 'authenticated');
 
+drop policy if exists "war_party_members_insert_mgmt" on public.war_party_members;
 create policy "war_party_members_insert_mgmt"
   on public.war_party_members for insert
   with check (
-    exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
 
+drop policy if exists "war_party_members_update_mgmt" on public.war_party_members;
 create policy "war_party_members_update_mgmt"
   on public.war_party_members for update
   using (
-    exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
 
+drop policy if exists "war_party_members_delete_mgmt" on public.war_party_members;
 create policy "war_party_members_delete_mgmt"
   on public.war_party_members for delete
   using (
-    exists (select 1 from public.profiles where id = auth.uid() and is_management = true)
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 7. PERFORMANCE INDEXES
---    Add indexes on frequently filtered columns to speed up queries.
--- ─────────────────────────────────────────────────────────────────────────────
-create index if not exists idx_attendance_week_start
-  on public.attendance (week_start);
-
-create index if not exists idx_attendance_user_id_week_start
-  on public.attendance (user_id, week_start);
-
-create index if not exists idx_war_setups_week_start
-  on public.war_setups (week_start);
-
-create index if not exists idx_war_groups_war_setup_id
-  on public.war_groups (war_setup_id);
-
-create index if not exists idx_war_parties_group_id
-  on public.war_parties (group_id);
-
-create index if not exists idx_war_party_members_war_setup_id
-  on public.war_party_members (war_setup_id);
-
-create index if not exists idx_war_party_members_party_id
-  on public.war_party_members (party_id);
-
-create index if not exists idx_profiles_discord_id
-  on public.profiles (discord_id);
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 8. ADMIN PIN FUNCTIONS
---    Management users can protect their session with a personal PIN.
---    The PIN is stored as a bcrypt hash via pgcrypto so the plaintext is never
---    saved to the database.
--- ─────────────────────────────────────────────────────────────────────────────
-
--- set_admin_pin: hash and store a new PIN for the calling user.
---   Only management users may call this function.
-create or replace function public.set_admin_pin(pin text)
-  returns void
-  language plpgsql
-  security definer
-  set search_path = public, extensions
-as $$
-declare
-  is_mgmt boolean;
-begin
-  select is_management into is_mgmt
-    from public.profiles
-   where id = auth.uid();
-
-  if not coalesce(is_mgmt, false) then
-    raise exception 'Only management users can set an admin PIN';
-  end if;
-
-  update public.profiles
-     set admin_pin_hash = extensions.crypt(pin, extensions.gen_salt('bf')),
-         updated_at     = now()
-   where id = auth.uid();
-end;
-$$;
-
-grant execute on function public.set_admin_pin(text) to authenticated;
-
--- verify_admin_pin: return true when the supplied PIN matches the stored hash.
-create or replace function public.verify_admin_pin(pin text)
-  returns boolean
-  language plpgsql
-  security definer
-  set search_path = public, extensions
-as $$
-declare
-  stored_hash text;
-begin
-  select admin_pin_hash into stored_hash
-    from public.profiles
-   where id = auth.uid();
-
-  if stored_hash is null then
-    return false;
-  end if;
-
-  return stored_hash = extensions.crypt(pin, stored_hash);
-end;
-$$;
-
-grant execute on function public.verify_admin_pin(text) to authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Helper: promote a user to management
 -- Usage: UPDATE public.profiles SET is_management = true WHERE discord_id = '<id>';
 -- ─────────────────────────────────────────────────────────────────────────────
+
+-- Helper: promote a user to admin
+-- Usage: UPDATE public.profiles SET is_management = true, is_admin = true WHERE discord_id = '<id>';
+
+create table if not exists public.admin_runtime_config (
+  singleton      boolean primary key default true check (singleton),
+  admin_pin_hash text
+);
+
+alter table public.admin_runtime_config enable row level security;
+
+-- Configure the admin PIN manually in the Supabase SQL editor with a command like:
+-- insert into public.admin_runtime_config (singleton, admin_pin_hash)
+-- values (true, encode(digest('REPLACE_WITH_A_SECRET_6_DIGIT_PIN', 'sha256'), 'hex'))
+-- on conflict (singleton) do update set admin_pin_hash = excluded.admin_pin_hash;
+
+create table if not exists public.class_catalog (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  color_hex   text not null,
+  created_at  timestamptz not null default now(),
+  unique (name)
+);
+
+alter table public.class_catalog enable row level security;
+
+drop policy if exists "class_catalog_select_auth" on public.class_catalog;
+create policy "class_catalog_select_auth"
+  on public.class_catalog for select using ((select auth.role()) = 'authenticated');
+
+insert into public.class_catalog (name, color_hex)
+values
+  ('Ironclad (หมัด)', '#C2A500'),
+  ('Celestune (พิณ)', '#1E3A8A'),
+  ('Numina (โคม)', '#7C3AED'),
+  ('Night walker (ดาบ)', '#1D9BF0'),
+  ('Dragonsvale (กระบี่)', '#0F766E'),
+  ('Bloodstrom (หอก)', '#DC2626'),
+  ('Sylphs (พระ)', '#EC4899')
+on conflict (name) do update set color_hex = excluded.color_hex;
+
+drop function if exists public.verify_admin_pin(text);
+create or replace function public.verify_admin_pin(provided_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  configured_pin_hash text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select admin_pin_hash
+    into configured_pin_hash
+  from public.admin_runtime_config
+  where singleton = true;
+
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured in public.admin_runtime_config';
+  end if;
+
+  return encode(digest(provided_pin, 'sha256'), 'hex') = configured_pin_hash;
+end;
+$$;
+
+grant execute on function public.verify_admin_pin(text) to authenticated;
+
+drop function if exists public.set_management_level_with_pin(uuid, text, text);
+create or replace function public.set_management_level_with_pin(
+  target_user_id uuid,
+  next_role text,
+  provided_pin text
+)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  updated_profile public.profiles;
+  configured_pin_hash text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select admin_pin_hash
+    into configured_pin_hash
+  from public.admin_runtime_config
+  where singleton = true;
+
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured in public.admin_runtime_config';
+  end if;
+
+  if encode(digest(provided_pin, 'sha256'), 'hex') <> configured_pin_hash then
+    raise exception 'Incorrect admin PIN';
+  end if;
+
+  if next_role not in ('member', 'management') then
+    raise exception 'Unsupported role';
+  end if;
+
+  update public.profiles
+  set is_management = (next_role = 'management'),
+      is_admin = false,
+      updated_at = now()
+  where id = target_user_id
+  returning * into updated_profile;
+
+  if updated_profile.id is null then
+    raise exception 'Profile not found';
+  end if;
+
+  return updated_profile;
+end;
+$$;
+
+grant execute on function public.set_management_level_with_pin(uuid, text, text) to authenticated;
+
+drop function if exists public.add_class_with_pin(text, text, text);
+create or replace function public.add_class_with_pin(
+  class_name text,
+  color_hex text,
+  provided_pin text
+)
+returns public.class_catalog
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  upserted_class public.class_catalog;
+  configured_pin_hash text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select admin_pin_hash
+    into configured_pin_hash
+  from public.admin_runtime_config
+  where singleton = true;
+
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured in public.admin_runtime_config';
+  end if;
+
+  if encode(digest(provided_pin, 'sha256'), 'hex') <> configured_pin_hash then
+    raise exception 'Incorrect admin PIN';
+  end if;
+
+  if class_name is null or btrim(class_name) = '' then
+    raise exception 'Class name is required';
+  end if;
+
+  if color_hex is null or color_hex !~ '^#[0-9A-Fa-f]{6}$' then
+    raise exception 'Color must be a hex value like #1E3A8A';
+  end if;
+
+  insert into public.class_catalog (name, color_hex)
+  values (btrim(class_name), upper(color_hex))
+  on conflict (name)
+  do update set color_hex = excluded.color_hex
+  returning * into upserted_class;
+
+  return upserted_class;
+end;
+$$;
+
+grant execute on function public.add_class_with_pin(text, text, text) to authenticated;
+
+create or replace function public.handle_new_user_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, discord_id, username, avatar_url, updated_at)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'provider_id', ''),
+    coalesce(
+      new.raw_user_meta_data->>'full_name',
+      new.raw_user_meta_data->>'name',
+      new.email,
+      'Unknown'
+    ),
+    nullif(new.raw_user_meta_data->>'avatar_url', ''),
+    now()
+  )
+  on conflict (id)
+  do update set
+    discord_id = excluded.discord_id,
+    username = excluded.username,
+    avatar_url = excluded.avatar_url,
+    updated_at = now();
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user_profile();
+
+insert into public.profiles (id, discord_id, username, avatar_url, updated_at)
+select
+  u.id,
+  coalesce(u.raw_user_meta_data->>'provider_id', ''),
+  coalesce(
+    u.raw_user_meta_data->>'full_name',
+    u.raw_user_meta_data->>'name',
+    u.email,
+    'Unknown'
+  ),
+  nullif(u.raw_user_meta_data->>'avatar_url', ''),
+  now()
+from auth.users u
+left join public.profiles p on p.id = u.id
+where p.id is null;

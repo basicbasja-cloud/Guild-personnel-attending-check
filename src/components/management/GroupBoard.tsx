@@ -8,9 +8,12 @@ import { MAX_MEMBERS_PER_GROUP } from '../../types';
 interface GroupBoardProps {
   groupData: GroupWithParties;
   onRemoveMember: (userId: string) => void;
+  onDeleteGroup: (groupId: string, groupName: string) => void;
+  maybeUserIds: Set<string>;
+  canEdit: boolean;
 }
 
-export function GroupBoard({ groupData, onRemoveMember }: GroupBoardProps) {
+export function GroupBoard({ groupData, onRemoveMember, onDeleteGroup, maybeUserIds, canEdit }: GroupBoardProps) {
   const { group, parties } = groupData;
   const totalMembers = parties.reduce((sum, p) => sum + p.members.length, 0);
 
@@ -32,6 +35,15 @@ export function GroupBoard({ groupData, onRemoveMember }: GroupBoardProps) {
         >
           {totalMembers}/{MAX_MEMBERS_PER_GROUP}
         </div>
+        {canEdit && (
+          <button
+            onClick={() => onDeleteGroup(group.id, group.name)}
+            className="ml-2 text-xs px-2 py-1 rounded-lg bg-red-900/40 border border-red-800 text-red-300 hover:bg-red-800/50 transition-colors"
+            title="Delete this group"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -41,6 +53,8 @@ export function GroupBoard({ groupData, onRemoveMember }: GroupBoardProps) {
             groupId={group.id}
             partyData={partyData}
             onRemoveMember={onRemoveMember}
+            maybeUserIds={maybeUserIds}
+            canEdit={canEdit}
           />
         ))}
       </div>
@@ -52,9 +66,11 @@ interface SubstituteBoardProps {
   substitutes: { userId: string; profile: Profile; position: number }[];
   maxSubstitutes: number;
   onRemoveMember: (userId: string) => void;
+  maybeUserIds: Set<string>;
+  canEdit: boolean;
 }
 
-export function SubstituteBoard({ substitutes, maxSubstitutes, onRemoveMember }: SubstituteBoardProps) {
+export function SubstituteBoard({ substitutes, maxSubstitutes, onRemoveMember, maybeUserIds, canEdit }: SubstituteBoardProps) {
   const slots = Array.from({ length: maxSubstitutes }, (_, i) => {
     const sub = substitutes.find((s) => s.position === i + 1) ?? null;
     return { position: i + 1, sub };
@@ -78,7 +94,9 @@ export function SubstituteBoard({ substitutes, maxSubstitutes, onRemoveMember }:
             key={position}
             position={position}
             member={sub}
+            isMaybe={sub ? maybeUserIds.has(sub.userId) : false}
             onRemove={() => sub && onRemoveMember(sub.userId)}
+            canEdit={canEdit}
           />
         ))}
       </div>
@@ -89,20 +107,23 @@ export function SubstituteBoard({ substitutes, maxSubstitutes, onRemoveMember }:
 interface SubstituteSlotProps {
   position: number;
   member: { userId: string; profile: Profile } | null;
+  isMaybe: boolean;
   onRemove: () => void;
+  canEdit: boolean;
 }
 
-function SubstituteSlot({ position, member, onRemove }: SubstituteSlotProps) {
+function SubstituteSlot({ position, member, isMaybe, onRemove, canEdit }: SubstituteSlotProps) {
   const dropId = `substitute::${position}`;
   const { isOver, setNodeRef } = useDroppable({
     id: dropId,
     data: { type: 'substitute', position },
+    disabled: !canEdit,
   });
 
   return (
     <div
       ref={setNodeRef}
-      className={`relative rounded-lg min-h-[2.5rem] transition-all
+      className={`relative rounded-lg min-h-10 transition-all
         ${member ? '' : 'border border-dashed border-amber-800/60 bg-amber-950/20'}
         ${isOver ? 'ring-2 ring-amber-500 ring-offset-1 ring-offset-slate-900' : ''}
       `}
@@ -114,14 +135,18 @@ function SubstituteSlot({ position, member, onRemove }: SubstituteSlotProps) {
             profile={member.profile}
             origin={{ type: 'substitute', position }}
             compact
+            isMaybe={isMaybe}
+            disabled={!canEdit}
           />
-          <button
-            onClick={onRemove}
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-600 hover:bg-red-600 text-slate-300 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
-            title="Remove"
-          >
-            ×
-          </button>
+          {canEdit && (
+            <button
+              onClick={onRemove}
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-600 hover:bg-red-600 text-slate-300 hover:text-white text-xs opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all flex items-center justify-center"
+              title="Remove"
+            >
+              ×
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-center h-10 text-amber-900 text-xs select-none">

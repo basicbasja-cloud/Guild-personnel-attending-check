@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { format, addWeeks } from 'date-fns';
 import { useAttendance } from '../../hooks/useAttendance';
 import type { Profile, AttendanceStatus } from '../../types';
+import { useClassCatalog } from '../../contexts/ClassCatalogContext';
 
 const STATUS_CONFIG: Record<
   AttendanceStatus,
@@ -36,6 +37,7 @@ interface AttendancePageProps {
 }
 
 export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps) {
+  const { classCatalog, getClassColor } = useClassCatalog();
   const [weekOffset, setWeekOffset] = useState(0);
   const targetWeek = weekOffset === 0 ? undefined : addWeeks(new Date(), weekOffset);
   const { attendance, loading, error, setStatus, currentWeekStart } = useAttendance(
@@ -48,6 +50,13 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
   const [charClass, setCharClass] = useState(profile.character_class ?? '');
   const [saving, setSaving] = useState(false);
 
+  const selectedClassColor = getClassColor(charClass || null);
+  const displayClassOptions = classCatalog.some((item) => item.name === charClass)
+    ? classCatalog
+    : charClass
+      ? [...classCatalog, { name: charClass, color_hex: selectedClassColor }]
+      : classCatalog;
+
   const handleStatusSelect = async (status: AttendanceStatus) => {
     await setStatus(status);
   };
@@ -59,7 +68,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
     setEditingProfile(false);
   };
 
-  const weekLabel = format(currentWeekStart, "'Week of' MMM d, yyyy");
+  const weekLabel = format(currentWeekStart, "EEEE MMM dd, yyyy");
 
   return (
     <div className="max-w-lg mx-auto p-4 pt-6">
@@ -161,13 +170,24 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
               <label className="text-slate-400 text-xs font-medium block mb-1">
                 Class / School (Job)
               </label>
-              <input
-                type="text"
+              <select
                 value={charClass}
                 onChange={(e) => setCharClass(e.target.value)}
-                placeholder="e.g. Wizard, Warrior, Archer…"
                 className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
-              />
+              >
+                <option value="">Select class</option>
+                {displayClassOptions.map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              {charClass && (
+                <div className="mt-2 inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-medium text-white" style={{ backgroundColor: selectedClassColor }}>
+                  <span className="w-2 h-2 rounded-full bg-white/70" />
+                  {charClass}
+                </div>
+              )}
             </div>
             <div className="flex gap-2 pt-1">
               <button

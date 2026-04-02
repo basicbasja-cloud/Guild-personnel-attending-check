@@ -7,9 +7,11 @@ interface PartyCardProps {
   groupId: string;
   partyData: PartyWithMembers;
   onRemoveMember: (userId: string) => void;
+  maybeUserIds: Set<string>;
+  canEdit: boolean;
 }
 
-export function PartyCard({ groupId, partyData, onRemoveMember }: PartyCardProps) {
+export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, canEdit }: PartyCardProps) {
   const { party, members } = partyData;
 
   const slots = Array.from({ length: MAX_MEMBERS_PER_PARTY }, (_, i) => {
@@ -36,7 +38,9 @@ export function PartyCard({ groupId, partyData, onRemoveMember }: PartyCardProps
             groupId={groupId}
             position={position}
             member={member ? { userId: member.user_id, profile: member.profile! } : null}
+            isMaybe={member ? maybeUserIds.has(member.user_id) : false}
             onRemove={() => member && onRemoveMember(member.user_id)}
+            canEdit={canEdit}
           />
         ))}
       </div>
@@ -49,20 +53,23 @@ interface PartySlotProps {
   groupId: string;
   position: number;
   member: { userId: string; profile: import('../../types').Profile } | null;
+  isMaybe: boolean;
   onRemove: () => void;
+  canEdit: boolean;
 }
 
-function PartySlot({ partyId, groupId, position, member, onRemove }: PartySlotProps) {
+function PartySlot({ partyId, groupId, position, member, isMaybe, onRemove, canEdit }: PartySlotProps) {
   const dropId = `party::${partyId}::${position}`;
   const { isOver, setNodeRef } = useDroppable({
     id: dropId,
     data: { type: 'party', partyId, groupId, position },
+    disabled: !canEdit,
   });
 
   return (
     <div
       ref={setNodeRef}
-      className={`relative rounded-lg min-h-[2.5rem] transition-all
+      className={`relative rounded-lg min-h-10 transition-all
         ${member ? '' : 'border border-dashed border-slate-600 bg-slate-900/40'}
         ${isOver ? 'ring-2 ring-indigo-500 ring-offset-1 ring-offset-slate-900' : ''}
       `}
@@ -74,14 +81,18 @@ function PartySlot({ partyId, groupId, position, member, onRemove }: PartySlotPr
             profile={member.profile}
             origin={{ type: 'party', partyId, position }}
             compact
+            isMaybe={isMaybe}
+            disabled={!canEdit}
           />
-          <button
-            onClick={onRemove}
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-600 hover:bg-red-600 text-slate-300 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
-            title="Remove from slot"
-          >
-            ×
-          </button>
+          {canEdit && (
+            <button
+              onClick={onRemove}
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-600 hover:bg-red-600 text-slate-300 hover:text-white text-xs opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all flex items-center justify-center"
+              title="Remove from slot"
+            >
+              ×
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-center h-10 text-slate-600 text-xs select-none">

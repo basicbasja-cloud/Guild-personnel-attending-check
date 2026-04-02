@@ -11,23 +11,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key',
-  {
-    auth: {
-      // Use implicit flow so OAuth tokens are returned in the URL hash
-      // fragment (#access_token=…) and processed entirely client-side,
-      // instead of requiring an async PKCE code-exchange network round-trip.
-      // The PKCE exchange hangs on desktop browsers on slow / VPN / corporate
-      // networks, causing the loading screen to get stuck on PC while mobile
-      // (which completes redirects more cleanly) is unaffected.
-      //
-      // Security note: this is a static SPA deployed on GitHub Pages — there
-      // is no backend available to perform a server-side token exchange.
-      // Hash fragments are never sent to servers (no referer leakage), and
-      // the Supabase JS client removes the hash from the URL immediately
-      // after reading the token, so the exposure window is negligible.
-      flowType: 'implicit',
-    },
-  }
+  supabaseUrl || 'https://zpxyunxpakuetqfxcuhe.supabase.co',
+  supabaseAnonKey || 'sb_publishable_62RRtXPMzeT2LtQ4pVJbVg_GAxW-EVY'
 );

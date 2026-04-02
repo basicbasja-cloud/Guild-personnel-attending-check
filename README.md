@@ -1,13 +1,14 @@
 # ⚔️ Guild War Manager
 
 A web application for guild attendance tracking and guild-war party management.  
-Hosted on **GitHub Pages** · Backend by **Supabase** · Auth via **Discord OAuth2**
+Hosted on **GitHub Pages** · Backend by **Supabase** · Auth via **Discord OAuth2** (+ optional test-only Google OAuth)
 
 ---
 
 ## Features
 
 - 🔐 **Discord OAuth login** — every member uses their unique Discord account
+- 🧪 **Optional Google OAuth login (test only)** — hidden unless explicitly enabled with env flag
 - 📋 **Attendance submission** — members pick **Join / Can't Join / Maybe** for each week
 - 👥 **Roster view** _(management only)_ — see all responses for the current week at a glance
 - ⚔️ **War setup builder** _(management only)_:
@@ -49,6 +50,7 @@ npm install
 3. In **Authentication → Providers**, enable **Discord** and fill in your Discord OAuth app credentials.
    - Discord app: [discord.com/developers/applications](https://discord.com/developers/applications)
    - Redirect URL to add in Discord: `https://<your-project>.supabase.co/auth/v1/callback`
+4. (Optional, test environment only) Enable **Google** provider with redirect URL `https://<your-project>.supabase.co/auth/v1/callback`.
 
 ### 3. Configure environment variables
 
@@ -61,9 +63,12 @@ Edit `.env.local`:
 ```
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_ENABLE_TEST_GOOGLE_LOGIN=false
 ```
 
 Get these from **Supabase → Project Settings → API**.
+
+Set `VITE_ENABLE_TEST_GOOGLE_LOGIN=true` only in your test environment to show the Google login button.
 
 ### 4. Run locally
 
@@ -80,6 +85,19 @@ npm run deploy
 This runs `npm run build` then pushes the `dist/` folder to the `gh-pages` branch.
 
 Make sure GitHub Pages is set to serve from the **`gh-pages` branch** in your repository settings.
+
+### 6. Deploy test build to a separate branch
+
+```bash
+npm run deploy:test
+```
+
+This runs `npm run build:test` (Vite test mode) and publishes `dist/` to the **`gh-pages-test`** branch.
+
+- `gh-pages` branch: production deployment (Discord-only)
+- `gh-pages-test` branch: test deployment (Google login button enabled via `.env.test`)
+
+If you want to open the test build as GitHub Pages, switch the Pages source branch to `gh-pages-test` temporarily.
 
 ---
 

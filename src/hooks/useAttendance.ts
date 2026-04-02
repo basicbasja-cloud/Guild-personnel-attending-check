@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { startOfISOWeek, formatISO } from 'date-fns';
+import { formatISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { getUpcomingSaturday } from '../lib/week';
 import type { Attendance, AttendanceStatus } from '../types';
 
 export function useAttendance(userId: string | null, weekStart?: Date) {
-  const currentWeekStart = weekStart ?? startOfISOWeek(new Date());
+  const currentWeekStart = getUpcomingSaturday(weekStart ?? new Date());
   const weekStartStr = formatISO(currentWeekStart, { representation: 'date' });
 
   const [attendance, setAttendance] = useState<Attendance | null>(null);

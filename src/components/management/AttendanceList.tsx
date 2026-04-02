@@ -19,7 +19,7 @@ export function AttendanceList({ attendances, weekStartStr }: AttendanceListProp
     not_join: attendances.filter((a) => a.status === 'not_join'),
   };
 
-  const weekLabel = format(new Date(weekStartStr + 'T00:00:00'), "'Week of' MMM d, yyyy");
+  const weekLabel = format(new Date(weekStartStr + 'T00:00:00'), "EEEE MMM dd, yyyy");
 
   return (
     <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
@@ -47,9 +47,9 @@ export function AttendanceList({ attendances, weekStartStr }: AttendanceListProp
                     className={`flex items-center gap-3 p-2 rounded-lg border ${cfg.bg} ${cfg.border}`}
                   >
                     {a.profile?.avatar_url ? (
-                      <img src={a.profile.avatar_url} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
+                      <img src={a.profile.avatar_url} alt="" className="w-7 h-7 rounded-full shrink-0" />
                     ) : (
-                      <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs flex-shrink-0 font-bold">
+                      <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                         {(a.profile?.username ?? '?').charAt(0).toUpperCase()}
                       </div>
                     )}

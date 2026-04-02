@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:test": "tsc -b && vite build --mode test",
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d dist",
+    "predeploy:test": "npm run build:test",
+    "deploy:test": "gh-pages -d dist -b gh-pages-test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

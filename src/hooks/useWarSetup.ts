@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { startOfISOWeek, formatISO } from 'date-fns';
+import { formatISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { getUpcomingSaturday } from '../lib/week';
 import type { WarSetup, WarGroup, WarParty, WarPartyMember } from '../types';
 import { MAX_PARTIES_PER_GROUP } from '../types';
 
@@ -70,7 +71,7 @@ async function loadSetupData(weekStartStr: string): Promise<WarSetupData | null>
 }
 
 export function useWarSetup(weekStart?: Date) {
-  const currentWeekStart = weekStart ?? startOfISOWeek(new Date());
+  const currentWeekStart = getUpcomingSaturday(weekStart ?? new Date());
   const weekStartStr = formatISO(currentWeekStart, { representation: 'date' });
 
   const [data, setData] = useState<WarSetupData | null>(null);
@@ -143,6 +144,20 @@ export function useWarSetup(weekStart?: Date) {
     await fetchSetup();
   };
 
+  const deleteGroup = async (groupId: string) => {
+    const { error: err } = await supabase
+      .from('war_groups')
+      .delete()
+      .eq('id', groupId);
+
+    if (err) {
+      setError(err.message);
+      return;
+    }
+
+    await fetchSetup();
+  };
+
   const assignMember = async (
     setupId: string,
     userId: string,
@@ -211,6 +226,7 @@ export function useWarSetup(weekStart?: Date) {
     refresh: fetchSetup,
     createSetup,
     addGroup,
+    deleteGroup,
     assignMember,
     removeMember,
     swapMembers,
