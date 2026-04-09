@@ -1,7 +1,5 @@
 interface LoginPageProps {
   onLogin: () => void;
-  onGoogleLogin?: () => void;
-  showGoogleLogin?: boolean;
   error: string | null;
   loading: boolean;
 }
@@ -12,7 +10,7 @@ function isInAppBrowser() {
   return /FBAN|FBAV|Instagram|Line\//i.test(userAgent);
 }
 
-export function LoginPage({ onLogin, onGoogleLogin, showGoogleLogin = false, error, loading }: LoginPageProps) {
+export function LoginPage({ onLogin, error, loading }: LoginPageProps) {
   const showInAppBrowserWarning = isInAppBrowser();
 
   return (
@@ -34,11 +32,6 @@ export function LoginPage({ onLogin, onGoogleLogin, showGoogleLogin = false, err
             Use your Discord account to join the guild roster and submit your attendance.
           </p>
 
-          {showGoogleLogin && (
-            <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 mb-4 text-amber-200 text-sm">
-              Test mode: Google login is enabled for QA only.
-            </div>
-          )}
 
           {showInAppBrowserWarning && (
             <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 mb-4 text-amber-200 text-sm">
@@ -71,33 +64,6 @@ export function LoginPage({ onLogin, onGoogleLogin, showGoogleLogin = false, err
             {loading ? 'Redirecting…' : 'Continue with Discord'}
           </button>
 
-          {showGoogleLogin && onGoogleLogin && (
-            <button
-              onClick={onGoogleLogin}
-              disabled={loading}
-              className="w-full mt-3 flex items-center justify-center gap-3 bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed text-slate-900 font-semibold py-3 px-4 rounded-xl transition-colors"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  fill="#EA4335"
-                  d="M12 10.2v3.9h5.4c-.24 1.26-.96 2.33-2.04 3.06l3.3 2.56c1.92-1.77 3.03-4.38 3.03-7.47 0-.73-.06-1.43-.19-2.1H12z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 22c2.7 0 4.96-.9 6.62-2.45l-3.3-2.56c-.9.6-2.04.97-3.32.97-2.55 0-4.71-1.73-5.48-4.05l-3.41 2.63C4.76 19.82 8.11 22 12 22z"
-                />
-                <path
-                  fill="#4A90E2"
-                  d="M6.52 13.91A5.97 5.97 0 0 1 6.2 12c0-.66.12-1.3.32-1.91l-3.41-2.63A10.2 10.2 0 0 0 2 12c0 1.64.39 3.2 1.11 4.54l3.41-2.63z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M12 6.04c1.47 0 2.79.5 3.83 1.49l2.88-2.88C16.95 3 14.7 2 12 2 8.11 2 4.76 4.18 3.11 7.46l3.41 2.63C7.29 7.77 9.45 6.04 12 6.04z"
-                />
-              </svg>
-              {loading ? 'Redirecting…' : 'Continue with Google (Test)'}
-            </button>
-          )}
         </div>
 
         <p className="text-center text-slate-600 text-xs mt-6">

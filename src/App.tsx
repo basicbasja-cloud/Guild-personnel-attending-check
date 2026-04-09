@@ -15,7 +15,7 @@ type Tab = 'attendance' | 'management' | 'roster' | 'admin';
 function AppContent() {
   const auth = useAuth();
   const [tab, setTab] = useState<Tab>('attendance');
-  const isTestGoogleLoginEnabled = import.meta.env.VITE_ENABLE_TEST_GOOGLE_LOGIN === 'true';
+
   const isRosterActive = tab === 'roster';
   const shouldLoadRosterAttendance = isRosterActive && !!auth.profile?.is_management;
 
@@ -53,8 +53,6 @@ function AppContent() {
     return (
       <LoginPage
         onLogin={auth.signInWithDiscord}
-        onGoogleLogin={auth.signInWithGoogle}
-        showGoogleLogin={isTestGoogleLoginEnabled}
         error={auth.error}
         loading={auth.loading}
       />
