@@ -18,14 +18,19 @@ export function useAllProfiles(enabled = true) {
           'id,discord_id,username,avatar_url,character_name,character_class,is_management,is_admin,created_at'
         )
         .order('username')
-    ).then(({ data, error }) => {
-      if (cancelled) return;
-      if (error) {
+    )
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error('useAllProfiles: failed to fetch profiles', error);
+          return;
+        }
+        setProfiles((data as Profile[] | null) ?? []);
+      })
+      .catch((error) => {
+        if (cancelled) return;
         console.error('useAllProfiles: failed to fetch profiles', error);
-        return;
-      }
-      setProfiles((data as Profile[] | null) ?? []);
-    });
+      });
 
     return () => {
       cancelled = true;
