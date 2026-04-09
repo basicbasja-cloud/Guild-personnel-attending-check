@@ -13,6 +13,7 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { useAttendance } from '../../hooks/useAttendance';
 import { useWarSetup } from '../../hooks/useWarSetup';
+import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
 import type { Profile } from '../../types';
@@ -39,6 +40,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
   const { weekAttendances, currentWeekStart } = useAttendance(null, targetWeek);
   const war = useWarSetup(targetWeek);
+  const { profiles: allProfiles } = useAllProfiles();
   const { getClassColor } = useClassCatalog();
 
   const [activeDrag, setActiveDrag] = useState<ActiveDragData | null>(null);
@@ -66,6 +68,11 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     .filter((a) => (a.status === 'join' || a.status === 'maybe') && !assignedUserIds.has(a.user_id))
     .map((a) => a.profile)
     .filter((p): p is Profile => !!p);
+
+  const respondedUserIds = new Set(weekAttendances.map((a) => a.user_id));
+  const nonSelectProfiles = allProfiles.filter(
+    (p) => !respondedUserIds.has(p.id) && !assignedUserIds.has(p.id)
+  );
 
   const maybeUserIds = new Set(
     weekAttendances
@@ -346,8 +353,13 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
           </div>
         ) : (
           <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-start">
-            {/* Left: Available members */}
-            <AvailablePanel members={availableMembers} maybeUserIds={maybeUserIds} canEdit={canEdit} />
+            {/* Left: Available members + Non-Select members */}
+            <div className="w-full xl:w-64 xl:shrink-0 flex flex-col gap-4 xl:sticky xl:top-20">
+              <AvailablePanel members={availableMembers} maybeUserIds={maybeUserIds} canEdit={canEdit} />
+              {nonSelectProfiles.length > 0 && (
+                <NonSelectPanel profiles={nonSelectProfiles} />
+              )}
+            </div>
 
             {/* Right: Groups + Substitutes */}
             <div className="flex-1 space-y-6 min-w-0">
@@ -443,7 +455,7 @@ function AvailablePanel({ members, maybeUserIds, canEdit }: { members: Profile[]
   return (
     <div
       ref={setNodeRef}
-      className={`w-full xl:w-64 xl:shrink-0 bg-slate-900 rounded-2xl border transition-colors xl:sticky xl:top-20 max-h-96 xl:max-h-[calc(100vh-6rem)] flex flex-col
+      className={`w-full bg-slate-900 rounded-2xl border transition-colors max-h-80 xl:max-h-[calc(50vh-3rem)] flex flex-col
         ${isOver ? 'border-indigo-500' : 'border-slate-700'}`}
     >
       <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between shrink-0">
@@ -472,6 +484,44 @@ function AvailablePanel({ members, maybeUserIds, canEdit }: { members: Profile[]
             />
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+function NonSelectPanel({ profiles }: { profiles: Profile[] }) {
+  return (
+    <div className="w-full bg-slate-900 rounded-2xl border border-slate-700 max-h-64 xl:max-h-[calc(40vh-3rem)] flex flex-col">
+      <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between shrink-0">
+        <h3 className="text-slate-400 font-bold text-sm">Non-Select</h3>
+        <span className="bg-slate-800 text-slate-400 text-xs px-2 py-0.5 rounded-full font-medium">
+          {profiles.length}
+        </span>
+      </div>
+
+      <div className="overflow-y-auto flex-1 p-3 space-y-2">
+        {profiles.map((p) => (
+          <div
+            key={p.id}
+            className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700"
+          >
+            {p.avatar_url ? (
+              <img src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-6 h-6 rounded-full shrink-0" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
+                {(p.username ?? '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-slate-300 text-xs font-medium truncate">
+                {p.character_name ?? p.username ?? 'Unknown'}
+              </p>
+              {p.character_class && (
+                <p className="text-slate-500 text-xs truncate">{p.character_class}</p>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
