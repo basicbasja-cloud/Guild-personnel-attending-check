@@ -19,9 +19,10 @@ interface AttendanceListProps {
   attendances: Attendance[];
   weekStartStr: string;
   allProfiles?: Profile[];
+  profilesLoading?: boolean;
 }
 
-export function AttendanceList({ attendances, weekStartStr, allProfiles }: AttendanceListProps) {
+export function AttendanceList({ attendances, weekStartStr, allProfiles, profilesLoading }: AttendanceListProps) {
   const byStatus = {
     join: attendances.filter((a) => a.status === 'join'),
     maybe: attendances.filter((a) => a.status === 'maybe'),
@@ -32,14 +33,14 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles }: Atten
   const nonSelectProfiles = (allProfiles ?? []).filter((p) => !respondedUserIds.has(p.id));
 
   const weekLabel = format(new Date(weekStartStr + 'T00:00:00'), "EEEE MMM dd, yyyy");
-  const totalMembers = allProfiles?.length ?? attendances.length;
+  const totalMembers = profilesLoading ? null : (allProfiles?.length ?? attendances.length);
 
   return (
     <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h3 className="text-white font-bold">Attendance — {weekLabel}</h3>
         <span className="text-slate-400 text-sm">
-          {attendances.length}/{totalMembers} responses
+          {attendances.length}/{totalMembers ?? '…'} responses
         </span>
       </div>
 
@@ -62,7 +63,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles }: Atten
                     className={`flex items-center gap-3 p-2 rounded-lg border ${cfg.bg} ${cfg.border}`}
                   >
                     {a.profile?.avatar_url ? (
-                      <img src={a.profile.avatar_url} alt="" className="w-7 h-7 rounded-full shrink-0" />
+                      <img src={a.profile.avatar_url} alt={a.profile.username ?? ''} className="w-7 h-7 rounded-full shrink-0" />
                     ) : (
                       <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                         {(a.profile?.username ?? '?').charAt(0).toUpperCase()}
@@ -98,7 +99,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles }: Atten
                   className={`flex items-center gap-3 p-2 rounded-lg border ${NON_SELECT_CONFIG.bg} ${NON_SELECT_CONFIG.border}`}
                 >
                   {p.avatar_url ? (
-                    <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full shrink-0" />
+                    <img src={p.avatar_url} alt={p.username ?? ''} className="w-7 h-7 rounded-full shrink-0" />
                   ) : (
                     <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                       {(p.username ?? '?').charAt(0).toUpperCase()}

@@ -5,11 +5,13 @@ import type { Profile } from '../types';
 
 export function useAllProfiles(enabled = true) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!enabled) return;
 
     let cancelled = false;
+    setLoading(true);
 
     withDbTiming('GET', 'profiles.all', () =>
       supabase
@@ -23,13 +25,16 @@ export function useAllProfiles(enabled = true) {
         if (cancelled) return;
         if (error) {
           console.error('useAllProfiles: failed to fetch profiles', error);
+          setLoading(false);
           return;
         }
         setProfiles((data as Profile[] | null) ?? []);
+        setLoading(false);
       })
       .catch((error) => {
         if (cancelled) return;
         console.error('useAllProfiles: failed to fetch profiles', error);
+        setLoading(false);
       });
 
     return () => {
@@ -37,5 +42,5 @@ export function useAllProfiles(enabled = true) {
     };
   }, [enabled]);
 
-  return { profiles };
+  return { profiles, loading };
 }

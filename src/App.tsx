@@ -26,7 +26,7 @@ function AppContent() {
     shouldLoadRosterAttendance
   );
 
-  const { profiles: allProfiles } = useAllProfiles(shouldLoadRosterAttendance);
+  const { profiles: allProfiles, loading: profilesLoading } = useAllProfiles(shouldLoadRosterAttendance);
 
   if (auth.loading) {
     return (
@@ -111,7 +111,7 @@ function AppContent() {
           )}
           {tab === 'roster' && (
             <div className="max-w-2xl mx-auto p-4 pt-6">
-              <AttendanceList attendances={weekAttendances} weekStartStr={weekStartStr} allProfiles={allProfiles} />
+              <AttendanceList attendances={weekAttendances} weekStartStr={weekStartStr} allProfiles={allProfiles} profilesLoading={profilesLoading} />
             </div>
           )}
           {tab === 'management' && (
