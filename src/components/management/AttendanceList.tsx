@@ -63,7 +63,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                     className={`flex items-center gap-3 p-2 rounded-lg border ${cfg.bg} ${cfg.border}`}
                   >
                     {a.profile?.avatar_url ? (
-                      <img src={a.profile.avatar_url} alt={a.profile.username ?? ''} className="w-7 h-7 rounded-full shrink-0" />
+                      <img src={a.profile.avatar_url} alt={a.profile.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
                     ) : (
                       <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                         {(a.profile?.username ?? '?').charAt(0).toUpperCase()}
@@ -99,7 +99,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                   className={`flex items-center gap-3 p-2 rounded-lg border ${NON_SELECT_CONFIG.bg} ${NON_SELECT_CONFIG.border}`}
                 >
                   {p.avatar_url ? (
-                    <img src={p.avatar_url} alt={p.username ?? ''} className="w-7 h-7 rounded-full shrink-0" />
+                    <img src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
                   ) : (
                     <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                       {(p.username ?? '?').charAt(0).toUpperCase()}
