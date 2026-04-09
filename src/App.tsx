@@ -7,6 +7,7 @@ import { ManagementPage } from './components/management/ManagementPage';
 import { AttendanceList } from './components/management/AttendanceList';
 import { AdminModePage } from './components/management/AdminModePage';
 import { useAttendance } from './hooks/useAttendance';
+import { useAllProfiles } from './hooks/useAllProfiles';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
@@ -17,13 +18,15 @@ function AppContent() {
   const [tab, setTab] = useState<Tab>('attendance');
   const isTestGoogleLoginEnabled = import.meta.env.VITE_ENABLE_TEST_GOOGLE_LOGIN === 'true';
   const isRosterActive = tab === 'roster';
-  const shouldLoadRosterAttendance = isRosterActive && !!auth.profile?.is_management;
+  const shouldLoadRosterAttendance = isRosterActive;
 
   const { weekAttendances, weekStartStr } = useAttendance(
     null,
     undefined,
     shouldLoadRosterAttendance
   );
+
+  const { profiles: allProfiles } = useAllProfiles(shouldLoadRosterAttendance);
 
   if (auth.loading) {
     return (
@@ -63,7 +66,7 @@ function AppContent() {
 
   const tabs: { id: Tab; label: string; emoji: string; mgmtOnly?: boolean }[] = [
     { id: 'attendance', label: 'Attendance', emoji: '📋' },
-    { id: 'roster', label: 'Roster', emoji: '👥', mgmtOnly: true },
+    { id: 'roster', label: 'Roster', emoji: '👥' },
     { id: 'management', label: 'War Setup', emoji: '⚔️', mgmtOnly: true },
     { id: 'admin', label: 'Admin Mode', emoji: '🔐', mgmtOnly: true },
   ];
@@ -106,9 +109,9 @@ function AppContent() {
           {tab === 'attendance' && (
             <AttendancePage profile={auth.profile} onUpdateProfile={auth.updateProfile} />
           )}
-          {tab === 'roster' && auth.profile.is_management && (
+          {tab === 'roster' && (
             <div className="max-w-2xl mx-auto p-4 pt-6">
-              <AttendanceList attendances={weekAttendances} weekStartStr={weekStartStr} />
+              <AttendanceList attendances={weekAttendances} weekStartStr={weekStartStr} allProfiles={allProfiles} />
             </div>
           )}
           {tab === 'management' && (
