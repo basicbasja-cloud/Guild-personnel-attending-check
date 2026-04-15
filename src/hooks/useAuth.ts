@@ -480,12 +480,6 @@ export function useAuth() {
   const signInWithGoogle = async () => {
     setState((s) => ({ ...s, error: null }));
 
-    // Keep Google auth disabled unless explicitly turned on for test usage.
-    if (import.meta.env.VITE_ENABLE_TEST_GOOGLE_LOGIN !== 'true') {
-      setState((s) => ({ ...s, error: 'Google login is disabled outside test environment.' }));
-      return;
-    }
-
     const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
