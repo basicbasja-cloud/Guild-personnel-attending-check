@@ -2,6 +2,7 @@ interface LoginPageProps {
   onLogin: () => void;
   onGoogleLogin?: () => void;
   showGoogleLogin?: boolean;
+  isTestGoogleLogin?: boolean;
   error: string | null;
   loading: boolean;
 }
@@ -12,7 +13,7 @@ function isInAppBrowser() {
   return /FBAN|FBAV|Instagram|Line\//i.test(userAgent);
 }
 
-export function LoginPage({ onLogin, onGoogleLogin, showGoogleLogin = false, error, loading }: LoginPageProps) {
+export function LoginPage({ onLogin, onGoogleLogin, showGoogleLogin = false, isTestGoogleLogin = false, error, loading }: LoginPageProps) {
   const showInAppBrowserWarning = isInAppBrowser();
 
   return (
@@ -34,7 +35,7 @@ export function LoginPage({ onLogin, onGoogleLogin, showGoogleLogin = false, err
             Use your Discord account to join the guild roster and submit your attendance.
           </p>
 
-          {showGoogleLogin && (
+          {showGoogleLogin && isTestGoogleLogin && (
             <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 mb-4 text-amber-200 text-sm">
               Test mode: Google login is enabled for QA only.
             </div>
@@ -95,7 +96,7 @@ export function LoginPage({ onLogin, onGoogleLogin, showGoogleLogin = false, err
                   d="M12 6.04c1.47 0 2.79.5 3.83 1.49l2.88-2.88C16.95 3 14.7 2 12 2 8.11 2 4.76 4.18 3.11 7.46l3.41 2.63C7.29 7.77 9.45 6.04 12 6.04z"
                 />
               </svg>
-              {loading ? 'Redirecting…' : 'Continue with Google (Test)'}
+              {loading ? 'Redirecting…' : isTestGoogleLogin ? 'Continue with Google (Test)' : 'Continue with Google'}
             </button>
           )}
         </div>
