@@ -26,10 +26,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Deploy to gh-pages
-        run: |
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          npm run deploy -- --user "github-actions-bot <support+actions@github.com>"
+      - name: Build
+        run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Deploy to gh-pages
+        run: npm run deploy -- --user "github-actions-bot <support+actions@github.com>"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
