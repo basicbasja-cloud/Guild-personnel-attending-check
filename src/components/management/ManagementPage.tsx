@@ -94,14 +94,26 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   const classDistribution = useMemo(() => {
     if (!war.data) return [];
     const counts = new Map<string, number>();
-    const allMembers = [
-      ...war.data.groups.flatMap((g) => g.parties.flatMap((p) => p.members)),
-      ...war.data.substitutes,
-    ];
-    for (const m of allMembers) {
-      const cls = m.profile?.character_class ?? 'Unknown';
+
+    const groups = Array.isArray(war.data.groups) ? war.data.groups : [];
+    const substitutes = Array.isArray(war.data.substitutes) ? war.data.substitutes : [];
+
+    const allMembers: (typeof groups[number] extends { parties: infer P } ? (P extends Array<infer U> ? U extends { members: infer M } ? (M extends Array<infer T> ? T : any) : any : any) : any)[] = [];
+    for (const g of groups) {
+      const parties = Array.isArray((g as any).parties) ? (g as any).parties : [];
+      for (const p of parties) {
+        const members = Array.isArray((p as any).members) ? (p as any).members : [];
+        for (const m of members) {
+          if (m) allMembers.push(m as any);
+        }
+      }
+    }
+
+    for (const m of [...allMembers, ...substitutes]) {
+      const cls = (m as any).profile?.character_class ?? 'Unknown';
       counts.set(cls, (counts.get(cls) ?? 0) + 1);
     }
+
     return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([cls, count]) => ({ cls, count }));
