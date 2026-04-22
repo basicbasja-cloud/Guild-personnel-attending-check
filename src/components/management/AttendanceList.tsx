@@ -77,6 +77,9 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                         {a.profile?.username}
                         {a.profile?.character_class ? ` · ${a.profile.character_class}` : ''}
                       </p>
+                      {a.set_by_profile && a.set_by_profile.id !== a.profile?.id && (
+                        <p className="text-slate-400 text-xs truncate">Set by {a.set_by_profile.username}</p>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -58,6 +58,7 @@ create table if not exists public.attendance (
   user_id     uuid not null references public.profiles(id) on delete cascade,
   week_start  date not null,   -- Monday of the ISO week, e.g. '2025-01-06'
   status      text not null check (status in ('join', 'not_join', 'maybe')),
+  set_by      uuid references public.profiles(id),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   unique (user_id, week_start)
@@ -72,12 +73,24 @@ create policy "attendance_select_auth"
 
 -- Users manage their own attendance rows
 drop policy if exists "attendance_insert_own" on public.attendance;
-create policy "attendance_insert_own"
-  on public.attendance for insert with check ((select auth.uid()) = user_id);
+create policy "attendance_insert_own_or_mgmt"
+  on public.attendance for insert with check (
+    (select auth.uid()) = user_id
+    or exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and is_management = true
+    )
+  );
 
 drop policy if exists "attendance_update_own" on public.attendance;
-create policy "attendance_update_own"
-  on public.attendance for update using ((select auth.uid()) = user_id);
+create policy "attendance_update_own_or_mgmt"
+  on public.attendance for update using (
+    (select auth.uid()) = user_id
+    or exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and is_management = true
+    )
+  );
 
 drop policy if exists "attendance_delete_own" on public.attendance;
 create policy "attendance_delete_own"
@@ -88,6 +101,37 @@ create index if not exists idx_attendance_week_start
   on public.attendance (week_start, created_at);
 create index if not exists idx_attendance_user_week
   on public.attendance (user_id, week_start);
+
+-- Trigger to set `set_by` when a row is inserted/updated by someone other than the target user
+drop function if exists public.attendance_set_set_by();
+create or replace function public.attendance_set_set_by()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  if auth.uid() is null then
+    new.set_by := null;
+    return new;
+  end if;
+
+  if new.user_id IS DISTINCT FROM (select auth.uid()) then
+    new.set_by := (select auth.uid());
+  else
+    new.set_by := null;
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists attendance_set_by_trigger on public.attendance;
+create trigger attendance_set_by_trigger
+before insert or update on public.attendance
+for each row execute procedure public.attendance_set_set_by();
+
+grant execute on function public.attendance_set_set_by() to authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. WAR SETUPS

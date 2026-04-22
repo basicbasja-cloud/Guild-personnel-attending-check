@@ -19,6 +19,8 @@ export interface Attendance {
   status: AttendanceStatus;
   created_at: string;
   updated_at: string;
+  set_by?: string | null;
+  set_by_profile?: Profile | null;
   profile?: Profile;
 }
 

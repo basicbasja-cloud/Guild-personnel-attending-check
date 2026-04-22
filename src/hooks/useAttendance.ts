@@ -28,7 +28,7 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
       () =>
         supabase
           .from('attendance')
-          .select('id,user_id,week_start,status,created_at,updated_at')
+          .select('id,user_id,week_start,status,created_at,updated_at,set_by')
           .eq('week_start', weekStartStr)
           .order('created_at', { ascending: true })
     );
@@ -36,17 +36,20 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
     if (baseErr) throw baseErr;
     const baseRows = (baseData as Attendance[]) ?? [];
     const userIds = Array.from(new Set(baseRows.map((r) => r.user_id).filter(Boolean)));
+    const setByIds = Array.from(new Set(baseRows.map((r) => (r as any).set_by).filter(Boolean)));
+
+    const allProfileIds = Array.from(new Set([...userIds, ...setByIds]));
 
     let profileById = new Map<string, Attendance['profile']>();
-    if (userIds.length > 0) {
+    if (allProfileIds.length > 0) {
       const { data: profilesData, error: profilesErr } = await withDbTiming(
         'GET',
-        `profiles.byIds count=${userIds.length}`,
+        `profiles.byIds count=${allProfileIds.length}`,
         () =>
           supabase
             .from('profiles')
             .select('id,discord_id,username,avatar_url,character_name,character_class,is_management,is_admin,created_at')
-            .in('id', userIds)
+            .in('id', allProfileIds)
       );
       if (!profilesErr) {
         profileById = new Map(
@@ -57,7 +60,11 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
       }
     }
 
-    const rows = baseRows.map((r) => ({ ...r, profile: profileById.get(r.user_id) }));
+    const rows = baseRows.map((r) => ({
+      ...r,
+      profile: profileById.get(r.user_id),
+      set_by_profile: (r as any).set_by ? profileById.get((r as any).set_by) ?? null : null,
+    }));
     const entry = { at: Date.now(), rows };
     weekAttendanceCache.set(weekStartStr, entry);
     persistWeek(weekStartStr, entry);
@@ -230,8 +237,9 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
     };
   }, [enabled, weekStartStr, userId, refreshSilent]);
 
-  const setStatus = async (status: AttendanceStatus) => {
-    if (!userId) return;
+  const setStatus = async (status: AttendanceStatus, targetUserId?: string) => {
+    const targetId = targetUserId ?? userId;
+    if (!userId || !targetId) return;
     setError(null);
 
     // ── Optimistic update ──────────────────────────────────────────────────
@@ -240,21 +248,26 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
     const prevWeekAttendances = weekAttendances;
 
     const now = new Date().toISOString();
-    const optimistic: Attendance = prevAttendance
+    const optimistic: Attendance = prevAttendance && targetId === userId
       ? { ...prevAttendance, status, updated_at: now }
       : {
           id: `opt-${Date.now()}`,
-          user_id: userId,
+          user_id: targetId,
           week_start: weekStartStr,
           status,
           created_at: now,
           updated_at: now,
+          set_by: targetId === userId ? (prevAttendance ? (prevAttendance as any).set_by ?? null : null) : userId,
+          set_by_profile: null,
         };
 
-    setAttendance(optimistic);
+    if (targetId === userId) {
+      setAttendance(optimistic);
+    }
+
     setWeekAttendances((prev) =>
-      prev.some((a) => a.user_id === userId)
-        ? prev.map((a) => (a.user_id === userId ? { ...a, status, updated_at: now } : a))
+      prev.some((a) => a.user_id === targetId)
+        ? prev.map((a) => (a.user_id === targetId ? { ...a, status, updated_at: now, set_by: optimistic.set_by, set_by_profile: optimistic.set_by_profile } : a))
         : [...prev, optimistic]
     );
     // Mirror into the module-level cache so a stale-while-revalidate hit
@@ -276,7 +289,7 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
       supabase
         .from('attendance')
         .upsert(
-          { user_id: userId, week_start: weekStartStr, status, updated_at: now },
+          { user_id: targetId, week_start: weekStartStr, status, updated_at: now },
           { onConflict: 'user_id,week_start' }
         )
         .select()
@@ -309,7 +322,9 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
       setError(err.message);
       return;
     }
-    setAttendance(data as Attendance);
+    if (targetId === userId) {
+      setAttendance(data as Attendance);
+    }
     // Realtime subscription will fire from the upsert and refresh all instances.
     // No explicit refreshSilent() needed here — it would duplicate the fetch.
   };

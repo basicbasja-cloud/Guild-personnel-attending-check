@@ -16,7 +16,7 @@ import { useWarSetup } from '../../hooks/useWarSetup';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
-import type { Profile } from '../../types';
+import type { Profile, AttendanceStatus } from '../../types';
 import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
 
@@ -38,7 +38,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   const [weekOffset, setWeekOffset] = useState(0);
   const targetWeek = weekOffset === 0 ? undefined : addWeeks(new Date(), weekOffset);
 
-  const { weekAttendances, currentWeekStart } = useAttendance(null, targetWeek);
+  const { weekAttendances, currentWeekStart, setStatus } = useAttendance(userId, targetWeek);
   const war = useWarSetup(targetWeek);
   const { profiles: allProfiles } = useAllProfiles();
   const { getClassColor } = useClassCatalog();
@@ -355,7 +355,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
           <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-start">
             {/* Left: Available members + Non-Select members */}
             <div className="w-full xl:w-64 xl:shrink-0 flex flex-col gap-4 xl:sticky xl:top-20">
-              <AvailablePanel members={availableMembers} maybeUserIds={maybeUserIds} canEdit={canEdit} />
+              <AvailablePanel members={availableMembers} maybeUserIds={maybeUserIds} canEdit={canEdit} setStatus={setStatus} />
               {nonSelectProfiles.length > 0 && (
                 <NonSelectPanel profiles={nonSelectProfiles} />
               )}
@@ -445,7 +445,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   );
 }
 
-function AvailablePanel({ members, maybeUserIds, canEdit }: { members: Profile[]; maybeUserIds: Set<string>; canEdit: boolean }) {
+function AvailablePanel({ members, maybeUserIds, canEdit, setStatus }: { members: Profile[]; maybeUserIds: Set<string>; canEdit: boolean; setStatus?: (status: AttendanceStatus, targetUserId?: string) => Promise<unknown> }) {
   const { isOver, setNodeRef } = useDroppable({
     id: 'available-pool',
     data: { type: 'available' },
@@ -474,14 +474,40 @@ function AvailablePanel({ members, maybeUserIds, canEdit }: { members: Profile[]
           </p>
         ) : (
           members.map((profile) => (
-            <MemberCard
-              key={profile.id}
-              id={`available::${profile.id}`}
-              profile={profile}
-              origin={{ type: 'available' }}
-              isMaybe={maybeUserIds.has(profile.id)}
-              disabled={!canEdit}
-            />
+            <div key={profile.id} className="flex items-center gap-2">
+              <MemberCard
+                id={`available::${profile.id}`}
+                profile={profile}
+                origin={{ type: 'available' }}
+                isMaybe={maybeUserIds.has(profile.id)}
+                disabled={!canEdit}
+              />
+              {canEdit && (
+                <div className="flex gap-2">
+                  <button
+                    title="Set Join"
+                    onClick={async () => { await setStatus?.('join', profile.id); }}
+                    className="w-9 h-9 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm"
+                  >
+                    ✅
+                  </button>
+                  <button
+                    title="Set Maybe"
+                    onClick={async () => { await setStatus?.('maybe', profile.id); }}
+                    className="w-9 h-9 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-sm"
+                  >
+                    🤔
+                  </button>
+                  <button
+                    title="Set Can't Join"
+                    onClick={async () => { await setStatus?.('not_join', profile.id); }}
+                    className="w-9 h-9 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm"
+                  >
+                    ❌
+                  </button>
+                </div>
+              )}
+            </div>
           ))
         )}
       </div>
