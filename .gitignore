@@ -23,6 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Production env
+.env.production
+
 # Agent skills and tools
 .agents/
 .claude/
