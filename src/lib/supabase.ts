@@ -11,7 +11,7 @@ export const supabaseConfigError =
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
     'Supabase environment variables are not set. ' +
-      'Create a .env.local file with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
+      'Create a .env.local or .env.production file with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
   );
 }
 
