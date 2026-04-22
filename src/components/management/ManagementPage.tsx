@@ -58,10 +58,16 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   // Members who said join/maybe and are not yet assigned to any slot
   const assignedUserIds = new Set<string>();
   if (war.data) {
-    war.data.groups.forEach((g) =>
-      g.parties.forEach((p) => p.members.forEach((m) => assignedUserIds.add(m.user_id)))
-    );
-    war.data.substitutes.forEach((s) => assignedUserIds.add(s.user_id));
+    if (Array.isArray(war.data.groups)) {
+      war.data.groups.forEach((g) =>
+        (Array.isArray(g.parties) ? g.parties : []).forEach((p) =>
+          (Array.isArray(p.members) ? p.members : []).forEach((m) => assignedUserIds.add(m.user_id))
+        )
+      );
+    }
+    if (Array.isArray(war.data.substitutes)) {
+      war.data.substitutes.forEach((s) => assignedUserIds.add(s.user_id));
+    }
   }
 
   const availableMembers = weekAttendances

@@ -102,8 +102,8 @@ export function ClassCatalogProvider({ children }: { children: ReactNode }) {
 
   const classColorMap = useMemo(() => {
     const map = new Map<string, string>();
-    classCatalog.forEach((item) => {
-      map.set(normalizeClassName(item.name), item.color_hex);
+    (Array.isArray(classCatalog) ? classCatalog : []).forEach((item) => {
+      if (item && item.name) map.set(normalizeClassName(item.name), item.color_hex);
     });
     return map;
   }, [classCatalog]);
