@@ -9,9 +9,10 @@ interface PartyCardProps {
   onRemoveMember: (userId: string) => void;
   maybeUserIds: Set<string>;
   canEdit: boolean;
+  partyNumberOffset?: number;
 }
 
-export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, canEdit }: PartyCardProps) {
+export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0 }: PartyCardProps) {
   const { party, members } = partyData;
 
   const slots = Array.from({ length: MAX_MEMBERS_PER_PARTY }, (_, i) => {
@@ -23,7 +24,7 @@ export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, ca
     <div className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
       {/* Party header */}
       <div className="px-3 py-2 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
-        <span className="text-slate-300 text-sm font-semibold">Party {party.party_number}</span>
+        <span className="text-slate-300 text-sm font-semibold">Party {party.party_number + partyNumberOffset}</span>
         <span className="text-slate-500 text-xs">
           {members.length}/{MAX_MEMBERS_PER_PARTY}
         </span>

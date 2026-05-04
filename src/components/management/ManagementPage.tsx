@@ -16,9 +16,10 @@ import { useWarSetup } from '../../hooks/useWarSetup';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
-import type { Profile, AttendanceStatus } from '../../types';
+import type { Profile } from '../../types';
 import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
+import { downloadCsv } from '../../lib/exportCsv';
 
 interface ManagementPageProps {
   userId: string;
@@ -38,14 +39,12 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   const [weekOffset, setWeekOffset] = useState(0);
   const targetWeek = weekOffset === 0 ? undefined : addWeeks(new Date(), weekOffset);
 
-  const { weekAttendances, currentWeekStart, setStatus } = useAttendance(userId, targetWeek);
+  const { weekAttendances, currentWeekStart } = useAttendance(userId, targetWeek);
   const war = useWarSetup(targetWeek);
   const { profiles: allProfiles } = useAllProfiles();
   const { getClassColor } = useClassCatalog();
 
   const [activeDrag, setActiveDrag] = useState<ActiveDragData | null>(null);
-  const [addingGroup, setAddingGroup] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
@@ -96,7 +95,6 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     const counts = new Map<string, number>();
 
     const groups = Array.isArray(war.data.groups) ? war.data.groups : [];
-    const substitutes = Array.isArray(war.data.substitutes) ? war.data.substitutes : [];
 
     const allMembers: (typeof groups[number] extends { parties: infer P } ? (P extends Array<infer U> ? U extends { members: infer M } ? (M extends Array<infer T> ? T : any) : any : any) : any)[] = [];
     for (const g of groups) {
@@ -109,7 +107,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
       }
     }
 
-    for (const m of [...allMembers, ...substitutes]) {
+    for (const m of allMembers) {
       const cls = (m as any).profile?.character_class ?? 'Unknown';
       counts.set(cls, (counts.get(cls) ?? 0) + 1);
     }
@@ -130,7 +128,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   }, [canEdit]);
 
   const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
+    (event: DragEndEvent) => {
       if (!canEdit) return;
       setActiveDrag(null);
       const { active, over } = event;
@@ -153,7 +151,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
       if (dropData.type === 'available') {
         // Drop back to available → remove from setup
-        await war.removeMember(setupId, dragUserId);
+        war.removeMember(setupId, dragUserId);
         return;
       }
 
@@ -170,7 +168,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
           // Swap
           const dragOrigin = dragData.origin;
           if (dragOrigin.type === 'party') {
-            await war.swapMembers(
+            war.swapMembers(
               setupId,
               dragUserId,
               existingInSlot.user_id,
@@ -179,10 +177,12 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
               false,
               partyId,
               position,
-              false
+              false,
+              dragData.profile,
+              existingInSlot.profile
             );
           } else if (dragOrigin.type === 'substitute') {
-            await war.swapMembers(
+            war.swapMembers(
               setupId,
               dragUserId,
               existingInSlot.user_id,
@@ -191,18 +191,20 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
               true,
               partyId,
               position,
-              false
+              false,
+              dragData.profile,
+              existingInSlot.profile
             );
           } else {
             // From available → displace existing member back to available
-            await war.removeMember(setupId, existingInSlot.user_id);
-            await war.assignMember(setupId, dragUserId, partyId, position, false);
+            war.removeMember(setupId, existingInSlot.user_id);
+            war.assignMember(setupId, dragUserId, partyId, position, false, dragData.profile);
           }
         } else if (!existingInSlot) {
           if (activeAssignedCount >= MAX_ACTIVE_MEMBERS && dragData.origin.type === 'available') {
             return; // Capacity reached
           }
-          await war.assignMember(setupId, dragUserId, partyId, position, false);
+          war.assignMember(setupId, dragUserId, partyId, position, false, dragData.profile);
         }
         return;
       }
@@ -215,7 +217,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
           // Swap substitute slots
           const dragOrigin = dragData.origin;
           if (dragOrigin.type === 'substitute') {
-            await war.swapMembers(
+            war.swapMembers(
               setupId,
               dragUserId,
               existingSub.user_id,
@@ -224,10 +226,12 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
               true,
               null,
               position,
-              true
+              true,
+              dragData.profile,
+              existingSub.profile
             );
           } else if (dragOrigin.type === 'party') {
-            await war.swapMembers(
+            war.swapMembers(
               setupId,
               dragUserId,
               existingSub.user_id,
@@ -236,11 +240,13 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
               false,
               null,
               position,
-              true
+              true,
+              dragData.profile,
+              existingSub.profile
             );
           } else {
-            await war.removeMember(setupId, existingSub.user_id);
-            await war.assignMember(setupId, dragUserId, null, position, true);
+            war.removeMember(setupId, existingSub.user_id);
+            war.assignMember(setupId, dragUserId, null, position, true, dragData.profile);
           }
         } else if (!existingSub) {
           if (
@@ -249,7 +255,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
           ) {
             return;
           }
-          await war.assignMember(setupId, dragUserId, null, position, true);
+          war.assignMember(setupId, dragUserId, null, position, true, dragData.profile);
         }
       }
     },
@@ -261,33 +267,43 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     await war.createSetup(userId);
   };
 
-  const handleAddGroup = async () => {
-    if (!canEdit) return;
-    if (!war.data || !newGroupName.trim()) return;
-    const highestGroupNumber = war.data.groups.reduce(
-      (max, g) => Math.max(max, g.group.group_number),
-      0
-    );
-    const nextNum = highestGroupNumber + 1;
-    await war.addGroup(war.data.setup.id, nextNum, newGroupName.trim());
-    setNewGroupName('');
-    setAddingGroup(false);
+  const handleExportWarSetup = () => {
+    if (!war.data) return;
+    const rows: Record<string, unknown>[] = [];
+    for (const g of war.data.groups) {
+      for (const p of g.parties) {
+        const partyDisplay = p.party.party_number + (g.group.group_number - 1) * 5;
+        for (const m of p.members) {
+          rows.push({
+            Group: g.group.name,
+            Party: partyDisplay,
+            Position: m.position,
+            Username: m.profile?.username ?? '',
+            'Character Name': m.profile?.character_name ?? '',
+            Class: m.profile?.character_class ?? '',
+            Substitute: 'No',
+          });
+        }
+      }
+    }
+    for (const s of war.data.substitutes) {
+      rows.push({
+        Group: 'Substitute',
+        Party: '',
+        Position: s.position,
+        Username: s.profile?.username ?? '',
+        'Character Name': s.profile?.character_name ?? '',
+        Class: s.profile?.character_class ?? '',
+        Substitute: 'Yes',
+      });
+    }
+    downloadCsv(rows, `war_setup_${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}.csv`);
   };
 
-  const handleRemoveMember = async (memberUserId: string) => {
+  const handleRemoveMember = (memberUserId: string) => {
     if (!canEdit) return;
     if (!war.data) return;
-    await war.removeMember(war.data.setup.id, memberUserId);
-  };
-
-  const handleDeleteGroup = async (groupId: string, groupName: string) => {
-    if (!canEdit) return;
-    if (!war.data) return;
-    const confirmed = window.confirm(
-      `Delete group "${groupName}"? This will remove all parties and assignments inside this group.`
-    );
-    if (!confirmed) return;
-    await war.deleteGroup(groupId);
+    war.removeMember(war.data.setup.id, memberUserId);
   };
 
   return (
@@ -348,7 +364,17 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         {classDistribution.length > 0 && (
           <ClassDistributionCard distribution={classDistribution} getClassColor={getClassColor} />
         )}
-        {classDistribution.length > 0 && <div className="mb-6" />}
+        {war.data && (
+          <div className="flex justify-end mt-2 mb-4">
+            <button
+              onClick={handleExportWarSetup}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+              title="Export war setup to CSV (opens in Excel)"
+            >
+              ⬇ Export War Setup
+            </button>
+          </div>
+        )}
 
         {!war.data ? (
           <div className="text-center py-20">
@@ -373,7 +399,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
           <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-start">
             {/* Left: Available members + Non-Select members */}
             <div className="w-full xl:w-64 xl:shrink-0 flex flex-col gap-4 xl:sticky xl:top-20">
-              <AvailablePanel members={availableMembers} maybeUserIds={maybeUserIds} canEdit={canEdit} setStatus={setStatus} />
+              <AvailablePanel members={availableMembers} maybeUserIds={maybeUserIds} canEdit={canEdit} />
               {nonSelectProfiles.length > 0 && (
                 <NonSelectPanel profiles={nonSelectProfiles} />
               )}
@@ -386,49 +412,11 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
                   key={g.group.id}
                   groupData={g}
                   onRemoveMember={handleRemoveMember}
-                  onDeleteGroup={handleDeleteGroup}
                   maybeUserIds={maybeUserIds}
                   canEdit={canEdit}
+                  partyNumberOffset={(g.group.group_number - 1) * 5}
                 />
               ))}
-
-              {/* Add Group button */}
-              {canEdit && war.data.groups.length * 30 < MAX_ACTIVE_MEMBERS && (
-                <div>
-                  {addingGroup ? (
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        value={newGroupName}
-                        onChange={(e) => setNewGroupName(e.target.value)}
-                        placeholder="Group name (e.g. Group A)"
-                        className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()}
-                        autoFocus
-                      />
-                      <button
-                        onClick={handleAddGroup}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={() => setAddingGroup(false)}
-                        className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm px-4 py-2 rounded-lg"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setAddingGroup(true)}
-                      className="w-full py-3 rounded-xl border-2 border-dashed border-slate-600 hover:border-indigo-500 text-slate-400 hover:text-indigo-400 transition-colors text-sm font-medium"
-                    >
-                      + Add Group
-                    </button>
-                  )}
-                </div>
-              )}
 
               {/* Substitutes */}
               <SubstituteBoard
@@ -463,7 +451,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   );
 }
 
-function AvailablePanel({ members, maybeUserIds, canEdit, setStatus }: { members: Profile[]; maybeUserIds: Set<string>; canEdit: boolean; setStatus?: (status: AttendanceStatus, targetUserId?: string) => Promise<unknown> }) {
+function AvailablePanel({ members, maybeUserIds, canEdit }: { members: Profile[]; maybeUserIds: Set<string>; canEdit: boolean }) {
   const { isOver, setNodeRef } = useDroppable({
     id: 'available-pool',
     data: { type: 'available' },
@@ -492,40 +480,13 @@ function AvailablePanel({ members, maybeUserIds, canEdit, setStatus }: { members
           </p>
         ) : (
           members.map((profile) => (
-            <div key={profile.id} className="flex items-center gap-2">
-              <MemberCard
-                id={`available::${profile.id}`}
-                profile={profile}
-                origin={{ type: 'available' }}
-                isMaybe={maybeUserIds.has(profile.id)}
-                disabled={!canEdit}
-              />
-              {canEdit && (
-                <div className="flex gap-2">
-                  <button
-                    title="Set Join"
-                    onClick={async () => { await setStatus?.('join', profile.id); }}
-                    className="w-9 h-9 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm"
-                  >
-                    ✅
-                  </button>
-                  <button
-                    title="Set Maybe"
-                    onClick={async () => { await setStatus?.('maybe', profile.id); }}
-                    className="w-9 h-9 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-sm"
-                  >
-                    🤔
-                  </button>
-                  <button
-                    title="Set Can't Join"
-                    onClick={async () => { await setStatus?.('not_join', profile.id); }}
-                    className="w-9 h-9 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm"
-                  >
-                    ❌
-                  </button>
-                </div>
-              )}
-            </div>
+            <MemberCard
+              id={`available::${profile.id}`}
+              profile={profile}
+              origin={{ type: 'available' }}
+              isMaybe={maybeUserIds.has(profile.id)}
+              disabled={!canEdit}
+            />
           ))
         )}
       </div>

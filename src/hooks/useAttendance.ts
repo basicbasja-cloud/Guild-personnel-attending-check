@@ -5,7 +5,7 @@ import { withDbTiming } from '../lib/dbTiming';
 import { getUpcomingSaturday } from '../lib/week';
 import type { Attendance, AttendanceStatus } from '../types';
 
-const WEEK_ATTENDANCE_CACHE_TTL_MS = 30000;
+const WEEK_ATTENDANCE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const WEEK_ATTENDANCE_STORAGE_PREFIX = 'gwm_att_v1_';
 const weekAttendanceCache = new Map<string, { at: number; rows: Attendance[] }>();
 
@@ -81,7 +81,10 @@ function readPersistedWeek(weekStr: string): { at: number; rows: Attendance[] } 
   try {
     const raw = localStorage.getItem(WEEK_ATTENDANCE_STORAGE_PREFIX + weekStr);
     if (!raw) return null;
-    return JSON.parse(raw) as { at: number; rows: Attendance[] };
+    const parsed = JSON.parse(raw);
+    // Guard against old cache format missing the rows array
+    if (!parsed || !Array.isArray(parsed.rows)) return null;
+    return parsed as { at: number; rows: Attendance[] };
   } catch {
     return null;
   }
@@ -93,6 +96,24 @@ function persistWeek(weekStr: string, entry: { at: number; rows: Attendance[] })
   } catch {
     // Ignore quota errors (private mode / storage full).
   }
+}
+
+/**
+ * Eagerly warm the attendance cache for the current week.
+ * Call this right after login so every tab opens instantly.
+ */
+export async function preloadAttendance(weekStart?: Date): Promise<void> {
+  const weekStartStr = formatISO(getUpcomingSaturday(weekStart ?? new Date()), { representation: 'date' });
+  let cached = weekAttendanceCache.get(weekStartStr);
+  if (!cached) {
+    const persisted = readPersistedWeek(weekStartStr);
+    if (persisted) {
+      weekAttendanceCache.set(weekStartStr, persisted);
+      cached = persisted;
+    }
+  }
+  if (cached && Date.now() - cached.at < WEEK_ATTENDANCE_CACHE_TTL_MS) return;
+  await fetchWeekRows(weekStartStr).catch(() => {});
 }
 
 export function useAttendance(userId: string | null, weekStart?: Date, enabled = true) {
@@ -159,19 +180,24 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
       }
     }
 
-    setLoading(!isCacheFresh);
-    refreshSilent()
-      .then((rows) => {
-        if (cancelled) return;
-        if (userId) {
-          setAttendance(rows.find((a) => a.user_id === userId) ?? null);
-        } else {
-          setAttendance(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    // Only show a loading spinner when we have NO cached data at all.
+    // If we have stale cache, show it instantly and revalidate silently.
+    setLoading(!(cached && cached.rows.length > 0));
+
+    if (!isCacheFresh) {
+      refreshSilent()
+        .then((rows) => {
+          if (cancelled) return;
+          if (userId) {
+            setAttendance(rows.find((a) => a.user_id === userId) ?? null);
+          } else {
+            setAttendance(null);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
 
     return () => {
       cancelled = true;

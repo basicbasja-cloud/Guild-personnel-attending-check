@@ -1,8 +1,56 @@
 import type { Profile } from '../../types';
+import { useSyncStatus } from '../../hooks/useSyncStatus';
 
 interface HeaderProps {
   profile: Profile | null;
   onSignOut: () => void;
+}
+
+function ConnectionBadge() {
+  const { status, isLive, pendingCount } = useSyncStatus();
+
+  if (status === 'offline') {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-900/60 text-red-400 text-xs font-medium select-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+        OFFLINE
+      </span>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-900/60 text-red-300 text-xs font-medium select-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-300 animate-pulse" />
+        ERROR
+      </span>
+    );
+  }
+
+  if (status === 'syncing' || pendingCount > 0) {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-xs font-medium select-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+        {pendingCount > 0 ? `SYNCING ${pendingCount}` : 'SYNCING'}
+      </span>
+    );
+  }
+
+  if (isLive) {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-900/60 text-emerald-400 text-xs font-medium select-none">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        LIVE
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 text-xs font-medium select-none">
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+      ONLINE
+    </span>
+  );
 }
 
 export function Header({ profile, onSignOut }: HeaderProps) {
@@ -17,6 +65,7 @@ export function Header({ profile, onSignOut }: HeaderProps) {
 
       {profile && (
         <div className="flex items-center gap-3">
+          <ConnectionBadge />
           {profile.avatar_url ? (
             <img
               src={profile.avatar_url}

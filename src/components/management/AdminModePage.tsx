@@ -46,6 +46,8 @@ export function AdminModePage({ userId }: AdminModePageProps) {
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
@@ -133,6 +135,27 @@ export function AdminModePage({ userId }: AdminModePageProps) {
     if (pinError) {
       setPinError(null);
     }
+  };
+
+  const handleDeleteUser = async (targetProfile: Profile) => {
+    setDeletingId(targetProfile.id);
+    setAdminError(null);
+
+    const { error } = await supabase.rpc('delete_user_with_pin', {
+      target_user_id: targetProfile.id,
+      provided_pin: storedPin,
+    });
+
+    if (error) {
+      setAdminError(error.message);
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+      return;
+    }
+
+    setProfiles((prev) => prev.filter((p) => p.id !== targetProfile.id));
+    setDeletingId(null);
+    setConfirmDeleteId(null);
   };
 
   const handleRoleChange = async (targetProfile: Profile, nextRole: RoleOption) => {
@@ -303,32 +326,67 @@ export function AdminModePage({ userId }: AdminModePageProps) {
           {profiles.map((listedProfile) => (
             <div
               key={listedProfile.id}
-              className="bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+              className="bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 flex flex-col gap-3"
             >
-              <div className="min-w-0">
-                <p className="text-white font-medium truncate">{listedProfile.username}</p>
-                <p className="text-slate-400 text-sm truncate">
-                  {listedProfile.character_name || 'No character name set'}
-                  {listedProfile.character_class ? ` · ${listedProfile.character_class}` : ''}
-                </p>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="text-white font-medium truncate">{listedProfile.username}</p>
+                  <p className="text-slate-400 text-sm truncate">
+                    {listedProfile.character_name || 'No character name set'}
+                    {listedProfile.character_class ? ` · ${listedProfile.character_class}` : ''}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {listedProfile.id === userId && (
+                    <span className="text-xs text-amber-300 bg-amber-900/40 border border-amber-700 rounded-full px-2 py-1">
+                      Current account
+                    </span>
+                  )}
+                  <select
+                    value={getRole(listedProfile)}
+                    onChange={(event) => handleRoleChange(listedProfile, event.target.value as RoleOption)}
+                    disabled={savingRoleId === listedProfile.id}
+                    className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="member">Member</option>
+                    <option value="management">Management</option>
+                  </select>
+                  {listedProfile.id !== userId && (
+                    <button
+                      onClick={() => setConfirmDeleteId(listedProfile.id)}
+                      disabled={deletingId === listedProfile.id}
+                      className="text-xs px-3 py-2 rounded-lg bg-red-900/40 border border-red-800 text-red-300 hover:bg-red-800/60 transition-colors disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                {listedProfile.id === userId && (
-                  <span className="text-xs text-amber-300 bg-amber-900/40 border border-amber-700 rounded-full px-2 py-1">
-                    Current account
-                  </span>
-                )}
-                <select
-                  value={getRole(listedProfile)}
-                  onChange={(event) => handleRoleChange(listedProfile, event.target.value as RoleOption)}
-                  disabled={savingRoleId === listedProfile.id}
-                  className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="member">Member</option>
-                  <option value="management">Management</option>
-                </select>
-              </div>
+              {/* Inline delete confirmation */}
+              {confirmDeleteId === listedProfile.id && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 rounded-lg bg-red-950/60 border border-red-800">
+                  <p className="text-red-300 text-sm flex-1">
+                    Permanently delete <strong>{listedProfile.username}</strong>? This removes their account and all data.
+                  </p>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => handleDeleteUser(listedProfile)}
+                      disabled={deletingId === listedProfile.id}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-white font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {deletingId === listedProfile.id ? 'Deleting…' : 'Confirm Delete'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

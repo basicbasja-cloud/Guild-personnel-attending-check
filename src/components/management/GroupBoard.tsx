@@ -8,12 +8,12 @@ import { MAX_MEMBERS_PER_GROUP } from '../../types';
 interface GroupBoardProps {
   groupData: GroupWithParties;
   onRemoveMember: (userId: string) => void;
-  onDeleteGroup: (groupId: string, groupName: string) => void;
   maybeUserIds: Set<string>;
   canEdit: boolean;
+  partyNumberOffset?: number;
 }
 
-export function GroupBoard({ groupData, onRemoveMember, onDeleteGroup, maybeUserIds, canEdit }: GroupBoardProps) {
+export function GroupBoard({ groupData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0 }: GroupBoardProps) {
   const { group, parties } = groupData;
   const totalMembers = parties.reduce((sum, p) => sum + p.members.length, 0);
 
@@ -35,15 +35,7 @@ export function GroupBoard({ groupData, onRemoveMember, onDeleteGroup, maybeUser
         >
           {totalMembers}/{MAX_MEMBERS_PER_GROUP}
         </div>
-        {canEdit && (
-          <button
-            onClick={() => onDeleteGroup(group.id, group.name)}
-            className="ml-2 text-xs px-2 py-1 rounded-lg bg-red-900/40 border border-red-800 text-red-300 hover:bg-red-800/50 transition-colors"
-            title="Delete this group"
-          >
-            Delete
-          </button>
-        )}
+
       </div>
 
       <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -55,6 +47,7 @@ export function GroupBoard({ groupData, onRemoveMember, onDeleteGroup, maybeUser
             onRemoveMember={onRemoveMember}
             maybeUserIds={maybeUserIds}
             canEdit={canEdit}
+            partyNumberOffset={partyNumberOffset}
           />
         ))}
       </div>

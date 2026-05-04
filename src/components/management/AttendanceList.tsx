@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import type { Attendance, Profile } from '../../types';
+import { downloadCsv } from '../../lib/exportCsv';
 
 const STATUS_CONFIG = {
   join: { label: 'Join', emoji: '✅', bg: 'bg-emerald-900/30', text: 'text-emerald-300', border: 'border-emerald-700' },
@@ -23,6 +24,12 @@ interface AttendanceListProps {
 }
 
 export function AttendanceList({ attendances, weekStartStr, allProfiles, profilesLoading }: AttendanceListProps) {
+  // Build a lookup map so we can fill in profile data for any attendance
+  // row whose cached .profile is missing (e.g. stale localStorage cache).
+  const profileById = new Map((allProfiles ?? []).map((p) => [p.id, p]));
+
+  const resolve = (a: Attendance) => a.profile ?? profileById.get(a.user_id);
+
   const byStatus = {
     join: attendances.filter((a) => a.status === 'join'),
     maybe: attendances.filter((a) => a.status === 'maybe'),
@@ -35,13 +42,46 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
   const weekLabel = format(new Date(weekStartStr + 'T00:00:00'), "EEEE MMM dd, yyyy");
   const totalMembers = profilesLoading ? null : (allProfiles?.length ?? attendances.length);
 
+  const handleExport = () => {
+    const statusLabel = (s: string) => s === 'join' ? 'Join' : s === 'not_join' ? "Can't Join" : 'Maybe';
+    const rows: Record<string, unknown>[] = [
+      ...attendances.map((a) => {
+        const p = resolve(a);
+        return {
+          Username: p?.username ?? '',
+          'Character Name': p?.character_name ?? '',
+          Class: p?.character_class ?? '',
+          Status: statusLabel(a.status),
+          'Set By': a.set_by_profile && a.set_by_profile.id !== p?.id ? (a.set_by_profile.username ?? '') : '',
+        };
+      }),
+      ...nonSelectProfiles.map((p) => ({
+        Username: p.username,
+        'Character Name': p.character_name ?? '',
+        Class: p.character_class ?? '',
+        Status: 'Non-Select',
+        'Set By': '',
+      })),
+    ];
+    downloadCsv(rows, `attendance_${weekStartStr}.csv`);
+  };
+
   return (
     <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h3 className="text-white font-bold">Attendance — {weekLabel}</h3>
-        <span className="text-slate-400 text-sm">
-          {attendances.length}/{totalMembers ?? '…'} responses
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 text-sm">
+            {attendances.length}/{totalMembers ?? '…'} responses
+          </span>
+          <button
+            onClick={handleExport}
+            className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+            title="Export to CSV (opens in Excel)"
+          >
+            ⬇ Export
+          </button>
+        </div>
       </div>
 
       <div className="divide-y divide-slate-800">
@@ -57,32 +97,35 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                 <span className="text-slate-500 text-xs">({members.length})</span>
               </div>
               <div className="space-y-2">
-                {members.map((a) => (
+                {members.map((a) => {
+                  const profile = resolve(a);
+                  return (
                   <div
                     key={a.id}
                     className={`flex items-center gap-3 p-2 rounded-lg border ${cfg.bg} ${cfg.border}`}
                   >
-                    {a.profile?.avatar_url ? (
-                      <img src={a.profile.avatar_url} alt={a.profile.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt={profile.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
                     ) : (
                       <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
-                        {(a.profile?.username ?? '?').charAt(0).toUpperCase()}
+                        {(profile?.username ?? '?').charAt(0).toUpperCase()}
                       </div>
                     )}
                     <div className="min-w-0">
                       <p className="text-white text-sm font-medium truncate">
-                        {a.profile?.character_name ?? a.profile?.username ?? 'Unknown'}
+                        {profile?.character_name ?? profile?.username ?? 'Unknown'}
                       </p>
                       <p className="text-slate-400 text-xs truncate">
-                        {a.profile?.username}
-                        {a.profile?.character_class ? ` · ${a.profile.character_class}` : ''}
+                        {profile?.username}
+                        {profile?.character_class ? ` · ${profile.character_class}` : ''}
                       </p>
-                      {a.set_by_profile && a.set_by_profile.id !== a.profile?.id && (
+                      {a.set_by_profile && a.set_by_profile.id !== profile?.id && (
                         <p className="text-slate-400 text-xs truncate">Set by {a.set_by_profile.username}</p>
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

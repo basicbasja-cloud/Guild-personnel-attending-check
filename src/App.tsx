@@ -1,32 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/auth/LoginPage';
 import { Header } from './components/layout/Header';
 import { AttendancePage } from './components/attendance/AttendancePage';
 import { ManagementPage } from './components/management/ManagementPage';
-import { AttendanceList } from './components/management/AttendanceList';
+import { RosterPage } from './components/management/RosterPage';
 import { AdminModePage } from './components/management/AdminModePage';
-import { useAttendance } from './hooks/useAttendance';
-import { useAllProfiles } from './hooks/useAllProfiles';
+import { PlayerStatsDashboard } from './components/management/PlayerStatsDashboard';
+import { preloadProfiles } from './hooks/useAllProfiles';
+import { preloadAttendance } from './hooks/useAttendance';
+import { preloadWarSetup } from './hooks/useWarSetup';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
-type Tab = 'attendance' | 'management' | 'roster' | 'admin';
+type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard';
 
 function AppContent() {
   const auth = useAuth();
   const [tab, setTab] = useState<Tab>('attendance');
   const isGoogleLoginEnabled = import.meta.env.VITE_ENABLE_GOOGLE_LOGIN === 'true';
-  const isRosterActive = tab === 'roster';
-  const shouldLoadRosterAttendance = isRosterActive;
 
-  const { weekAttendances, weekStartStr } = useAttendance(
-    null,
-    undefined,
-    shouldLoadRosterAttendance
-  );
-
-  const { profiles: allProfiles, loading: profilesLoading } = useAllProfiles(shouldLoadRosterAttendance);
+  // Preload all data into cache as soon as the user is authenticated
+  // so every tab opens instantly with zero loading spinners.
+  useEffect(() => {
+    if (auth.user?.id) {
+      preloadProfiles().catch(() => {});
+      preloadAttendance().catch(() => {});
+      preloadWarSetup().catch(() => {});
+    }
+  }, [auth.user?.id]);
 
   if (auth.loading) {
     return (
@@ -68,6 +70,7 @@ function AppContent() {
     { id: 'attendance', label: 'Attendance', emoji: '📋' },
     { id: 'roster', label: 'Roster', emoji: '👥' },
     { id: 'management', label: 'War Setup', emoji: '⚔️', mgmtOnly: true },
+    { id: 'dashboard', label: 'Dashboard', emoji: '📊', mgmtOnly: true },
     { id: 'admin', label: 'Admin Mode', emoji: '🔐', mgmtOnly: true },
   ];
 
@@ -109,16 +112,15 @@ function AppContent() {
           {tab === 'attendance' && (
             <AttendancePage profile={auth.profile} onUpdateProfile={auth.updateProfile} />
           )}
-          {tab === 'roster' && (
-            <div className="max-w-2xl mx-auto p-4 pt-6">
-              <AttendanceList attendances={weekAttendances} weekStartStr={weekStartStr} allProfiles={allProfiles} profilesLoading={profilesLoading} />
-            </div>
-          )}
+          {tab === 'roster' && <RosterPage />}
           {tab === 'management' && (
             <ManagementPage userId={auth.profile.id} canEdit={auth.profile.is_management} />
           )}
           {tab === 'admin' && (
             <AdminModePage userId={auth.profile.id} />
+          )}
+          {tab === 'dashboard' && auth.profile.is_management && (
+            <PlayerStatsDashboard />
           )}
         </main>
       </div>
