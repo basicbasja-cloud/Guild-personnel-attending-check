@@ -73,6 +73,7 @@ create policy "attendance_select_auth"
 
 -- Users manage their own attendance rows
 drop policy if exists "attendance_insert_own" on public.attendance;
+drop policy if exists "attendance_insert_own_or_management" on public.attendance;
 create policy "attendance_insert_own_or_mgmt"
   on public.attendance for insert with check (
     (select auth.uid()) = user_id
@@ -83,6 +84,7 @@ create policy "attendance_insert_own_or_mgmt"
   );
 
 drop policy if exists "attendance_update_own" on public.attendance;
+drop policy if exists "attendance_update_own_or_management" on public.attendance;
 create policy "attendance_update_own_or_mgmt"
   on public.attendance for update using (
     (select auth.uid()) = user_id
@@ -101,6 +103,8 @@ create index if not exists idx_attendance_week_start
   on public.attendance (week_start, created_at);
 create index if not exists idx_attendance_user_week
   on public.attendance (user_id, week_start);
+create index if not exists idx_attendance_set_by
+  on public.attendance (set_by);
 
 -- Trigger to set `set_by` when a row is inserted/updated by someone other than the target user
 drop function if exists public.attendance_set_set_by();
@@ -108,6 +112,7 @@ create or replace function public.attendance_set_set_by()
 returns trigger
 language plpgsql
 security definer
+set search_path = ''
 as $$
 begin
   if auth.uid() is null then
@@ -126,12 +131,13 @@ begin
 end;
 $$;
 
+-- Trigger functions must not be callable via REST API
+revoke execute on function public.attendance_set_set_by() from public;
+
 drop trigger if exists attendance_set_by_trigger on public.attendance;
 create trigger attendance_set_by_trigger
 before insert or update on public.attendance
 for each row execute procedure public.attendance_set_set_by();
-
-grant execute on function public.attendance_set_set_by() to authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. WAR SETUPS
@@ -365,6 +371,7 @@ end;
 $$;
 
 grant execute on function public.verify_admin_pin(text) to authenticated;
+revoke execute on function public.verify_admin_pin(text) from public;
 
 drop function if exists public.set_management_level_with_pin(uuid, text, text);
 create or replace function public.set_management_level_with_pin(
@@ -418,6 +425,7 @@ end;
 $$;
 
 grant execute on function public.set_management_level_with_pin(uuid, text, text) to authenticated;
+revoke execute on function public.set_management_level_with_pin(uuid, text, text) from public;
 
 drop function if exists public.add_class_with_pin(text, text, text);
 create or replace function public.add_class_with_pin(
@@ -470,6 +478,7 @@ end;
 $$;
 
 grant execute on function public.add_class_with_pin(text, text, text) to authenticated;
+revoke execute on function public.add_class_with_pin(text, text, text) from public;
 
 create or replace function public.handle_new_user_profile()
 returns trigger
@@ -501,6 +510,9 @@ begin
   return new;
 end;
 $$;
+
+-- Trigger function must not be callable via REST API
+revoke execute on function public.handle_new_user_profile() from public;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
