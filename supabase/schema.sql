@@ -480,6 +480,63 @@ $$;
 grant execute on function public.add_class_with_pin(text, text, text) to authenticated;
 revoke execute on function public.add_class_with_pin(text, text, text) from public;
 
+drop function if exists public.delete_user_with_pin(uuid, text);
+create or replace function public.delete_user_with_pin(
+  target_user_id uuid,
+  provided_pin text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  configured_pin_hash text;
+  recent_failures     int;
+  is_correct          boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select count(*)
+    into recent_failures
+  from public.admin_pin_attempts
+  where user_id = auth.uid()
+    and success = false
+    and attempted_at > now() - interval '15 minutes';
+
+  if recent_failures >= 5 then
+    raise exception 'Too many failed attempts. Please wait 15 minutes before trying again.';
+  end if;
+
+  select admin_pin_hash
+    into configured_pin_hash
+  from public.admin_runtime_config
+  where singleton = true;
+
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured in public.admin_runtime_config';
+  end if;
+
+  is_correct := crypt(provided_pin, configured_pin_hash) = configured_pin_hash;
+  insert into public.admin_pin_attempts (user_id, success) values (auth.uid(), is_correct);
+
+  if not is_correct then
+    raise exception 'Incorrect admin PIN';
+  end if;
+
+  if target_user_id = auth.uid() then
+    raise exception 'Cannot delete your own account';
+  end if;
+
+  delete from auth.users where id = target_user_id;
+end;
+$$;
+
+grant execute on function public.delete_user_with_pin(uuid, text) to authenticated;
+revoke execute on function public.delete_user_with_pin(uuid, text) from public;
+
 create or replace function public.handle_new_user_profile()
 returns trigger
 language plpgsql

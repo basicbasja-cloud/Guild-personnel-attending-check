@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Profile } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
+import { evictProfileFromCache } from '../../hooks/useAllProfiles';
 
 interface AdminModePageProps {
   userId: string;
@@ -153,6 +154,7 @@ export function AdminModePage({ userId }: AdminModePageProps) {
       return;
     }
 
+    evictProfileFromCache(targetProfile.id);
     setProfiles((prev) => prev.filter((p) => p.id !== targetProfile.id));
     setDeletingId(null);
     setConfirmDeleteId(null);

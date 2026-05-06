@@ -48,6 +48,25 @@ async function fetchAndCache(): Promise<Profile[]> {
 }
 
 /**
+ * Remove a single profile from both in-memory and localStorage caches.
+ * Call this after a successful account deletion so other pages update immediately.
+ */
+export function evictProfileFromCache(userId: string) {
+  if (memCache) {
+    const filtered = memCache.profiles.filter((p) => p.id !== userId);
+    memCache = { at: memCache.at, profiles: filtered };
+    writeLocalCache(filtered);
+  } else {
+    const local = readLocalCache();
+    if (local) {
+      const filtered = local.profiles.filter((p) => p.id !== userId);
+      memCache = { at: local.at, profiles: filtered };
+      writeLocalCache(filtered);
+    }
+  }
+}
+
+/**
  * Kick off a background profile fetch and cache the result.
  * Call this once after login so the Management tab loads instantly.
  */
