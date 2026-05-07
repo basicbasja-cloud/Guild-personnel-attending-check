@@ -392,7 +392,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
         )}
       </div>
 
-      {/* On-behalf section — available to all users */}
+      {/* On-behalf section — visible to all, DB enforces manager-only writes */}
       <OnBehalfSection
         currentUserId={profile.id}
         weekAttendances={weekAttendances}
