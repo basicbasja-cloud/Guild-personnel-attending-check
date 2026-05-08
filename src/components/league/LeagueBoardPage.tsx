@@ -736,7 +736,7 @@ export function LeagueBoardPage({ userId: _userId, isManagement, parties, onUpda
               >
                 {/* Map background */}
                 <img
-                  src="/league-map.jpg"
+                  src={`${import.meta.env.BASE_URL}league-map.jpg`}
                   alt="League Map"
                   className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
                   draggable={false}
