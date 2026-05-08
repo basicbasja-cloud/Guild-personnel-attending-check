@@ -1,3 +1,78 @@
+# Patch Notes — May 8, 2026
+
+---
+
+## For Guild Members & Officers
+
+### New Features
+
+- **Google Login** — You can now sign in with a Google account in addition to Discord.
+
+- **League Board** — A new "League Board" tab is available for all logged-in members. It shows the league war map with party positions for each phase. Officers can drag party markers, add enemy positions, draw freehand arrows and lines on the map (like MS Paint), and plan each of the three phases separately. Drawings save in real time and are visible to everyone.
+
+- **Ultimate Skills on Profile** — You can now save your main and sub ultimate skill names and levels from the Attendance page profile editor. These show up on your member card in War Setup so officers can see your build at a glance.
+
+- **Audit Log** — Officers can open an Audit Log from the Management page to see a paginated history of management actions: attendance overrides, account deletions, and party assignments/removals. Filterable by action type.
+
+- **Logo Color Saves Across Devices** — Your chosen logo color is now saved to your account. Changing it on one device will apply on all your other devices when you log in.
+
+### Bug Fixes
+
+- Map image was not showing on the League Board in production (GitHub Pages) — fixed.
+- War Setup realtime sync showed an error ("cannot add postgres_changes callbacks after subscribe") when switching weeks — fixed.
+
+---
+
+## For Technical People
+
+### New Features & Improvements
+
+**Google Login**
+- `deploy.yml` — Added `VITE_ENABLE_GOOGLE_LOGIN: 'true'` env var to the CI build step. Google OAuth button now appears in the production build.
+
+**League Board**
+- New `LeagueBoardPage.tsx` component (~580 lines). Party markers, enemy markers (draggable red "E"), phase selector (1/2/3), right info panel with unplaced/placed party lists, icon picker modal.
+- New `useLeagueBoard.ts` hook — manages `league_plans`, `league_zone_assignments`, `league_arrows`, `league_drawings` with Supabase realtime sync. Methods: `addDrawing`, `deleteDrawing`, `addEnemyMarker`, `moveAssignment`, arrow upsert.
+- New `leagueMapLayout.ts` — `PARTY_ICONS`, `ICON_GLYPHS`, `PHASE_COLORS`, `LEAGUE_LANDMARKS` constants.
+- `FreehandLayer` SVG component: `viewBox="0 0 100 100" preserveAspectRatio="none"` aligns SVG % coords to CSS % positions exactly. Live draw preview via direct DOM refs (`livePathRef`/`liveHeadRef`) — no React re-render during stroke. Quadratic Bézier interpolation. Arrowhead from last 5 points' angle.
+- `App.tsx` — Added `league` tab (visible to all authenticated users). `useWarSetup()` data mapped to `PartySummaryWithMembers[]` via `useMemo` and passed to `LeagueBoardPage`. Tab stays mounted (`hidden` class) to preserve state across tab switches.
+- `league_drawings` table: `id uuid`, `plan_id`, `phase int`, `points jsonb`, `created_at`. RLS applied.
+
+**Ultimate Skills**
+- `AttendancePage.tsx` — Profile editor extended with Main Skill / Sub Skill name and level fields. `onUpdateProfile` prop now accepts `main_skill_name`, `main_skill_level`, `sub_skill_name`, `sub_skill_level`.
+- `MemberCard.tsx` — Skill name + level badges rendered below character class when present.
+- `types/index.ts` — `main_skill_name`, `main_skill_level`, `sub_skill_name`, `sub_skill_level`, `logo_color` added to `Profile` interface.
+- `useAuth.ts` — `updateProfile` allows the new skill + logo fields. `buildFallbackProfile()` initializes all new fields to `null`.
+
+**Audit Log**
+- New `AuditLogModal.tsx` — paginated (25/page) audit log viewer. Filters by action type (`attendance_override`, `admin_delete_user`, `party_assign`, `party_remove`). `writeAuditLog()` helper exported for use in action handlers.
+- `audit_log` table: `id`, `actor_id`, `action`, `target_type`, `target_id`, `details jsonb`, `created_at`. FK join to `profiles` for actor display.
+
+**Logo Color Persistence**
+- `profiles.logo_color text DEFAULT '#4f46e5'` column added.
+- `Header.tsx` — Reads from `profile.logo_color`, falls back to `localStorage('gwm_logo_color')`, then `#4f46e5`. On change: updates localStorage immediately + `supabase.from('profiles').update({ logo_color })` for cross-device sync.
+
+**syncEngine improvements**
+- `syncEngine.ts` — Extended with `getPendingCount()` and additional queue management used by the war setup realtime handler to avoid overwriting in-flight optimistic updates.
+
+### Bug Fixes
+
+- `useWarSetup.ts` — Realtime channel name was `war-${setupId}` (static). Supabase JS caches channels by name; when React re-ran the effect (week change or re-mount), it returned the already-subscribed channel and failed to add `.on()`. Fixed by appending `Date.now()` to make each subscription name unique: `war-${setupId}-${Date.now()}`.
+- `LeagueBoardPage.tsx` — Map `src="/league-map.jpg"` returned 404 on GitHub Pages (base = `/Guild-personnel-attending-check/`). Fixed to `` `${import.meta.env.BASE_URL}league-map.jpg` ``.
+- `AuditLogModal.tsx` — `.catch()` on Supabase `PromiseLike` caused TS2339 build error. Wrapped with `Promise.resolve(query).then(...).catch(...)`.
+
+### Database
+
+- `league_drawings` — freehand strokes per plan per phase.
+- `audit_log` — management action history with actor FK.
+- `profiles.logo_color text DEFAULT '#4f46e5'` — user logo color preference.
+
+### Deployment
+
+- Commits after `0a99e67`: `2d43687` (Google login), `4de4ecb` (league board + skills + audit log), `899403e` (build fixes), `de51597` (map image path).
+
+---
+
 # Patch Notes — May 4, 2026
 
 ---
