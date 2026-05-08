@@ -194,7 +194,7 @@ function OnBehalfSection({ currentUserId, weekAttendances, weekStartStr, targetW
 
 interface AttendancePageProps {
   profile: Profile;
-  onUpdateProfile: (updates: Partial<Pick<Profile, 'character_name' | 'character_class'>>) => Promise<unknown>;
+  onUpdateProfile: (updates: Partial<Pick<Profile, 'character_name' | 'character_class' | 'main_skill_name' | 'main_skill_level' | 'sub_skill_name' | 'sub_skill_level'>>) => Promise<unknown>;
 }
 
 export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps) {
@@ -209,6 +209,10 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
   const [editingProfile, setEditingProfile] = useState(false);
   const [charName, setCharName] = useState(profile.character_name ?? '');
   const [charClass, setCharClass] = useState(profile.character_class ?? '');
+  const [mainSkillName, setMainSkillName] = useState(profile.main_skill_name ?? '');
+  const [mainSkillLevel, setMainSkillLevel] = useState(profile.main_skill_level?.toString() ?? '');
+  const [subSkillName, setSubSkillName] = useState(profile.sub_skill_name ?? '');
+  const [subSkillLevel, setSubSkillLevel] = useState(profile.sub_skill_level?.toString() ?? '');
   const [saving, setSaving] = useState(false);
 
   const selectedClassColor = getClassColor(charClass || null);
@@ -224,7 +228,14 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
 
   const handleSaveProfile = async () => {
     setSaving(true);
-    await onUpdateProfile({ character_name: charName || null, character_class: charClass || null });
+    await onUpdateProfile({
+      character_name: charName || null,
+      character_class: charClass || null,
+      main_skill_name: mainSkillName || null,
+      main_skill_level: mainSkillLevel ? parseInt(mainSkillLevel, 10) || null : null,
+      sub_skill_name: subSkillName || null,
+      sub_skill_level: subSkillLevel ? parseInt(subSkillLevel, 10) || null : null,
+    });
     setSaving(false);
     setEditingProfile(false);
   };
@@ -350,6 +361,54 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
                 </div>
               )}
             </div>
+            {/* Skill fields */}
+            <div className="border-t border-slate-700 pt-3 mt-1">
+              <p className="text-slate-400 text-xs font-semibold mb-2 uppercase tracking-wide">Ultimate Skills</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 text-xs font-medium block mb-1">Main Skill</label>
+                  <input
+                    type="text"
+                    value={mainSkillName}
+                    onChange={(e) => setMainSkillName(e.target.value)}
+                    placeholder="Skill name"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 text-xs font-medium block mb-1">Level</label>
+                  <input
+                    type="number"
+                    value={mainSkillLevel}
+                    onChange={(e) => setMainSkillLevel(e.target.value)}
+                    placeholder="e.g. 5"
+                    min={1}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 text-xs font-medium block mb-1">Sub Skill</label>
+                  <input
+                    type="text"
+                    value={subSkillName}
+                    onChange={(e) => setSubSkillName(e.target.value)}
+                    placeholder="Skill name"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 text-xs font-medium block mb-1">Level</label>
+                  <input
+                    type="number"
+                    value={subSkillLevel}
+                    onChange={(e) => setSubSkillLevel(e.target.value)}
+                    placeholder="e.g. 3"
+                    min={1}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
             <div className="flex gap-2 pt-1">
               <button
                 onClick={handleSaveProfile}
@@ -363,6 +422,10 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
                   setEditingProfile(false);
                   setCharName(profile.character_name ?? '');
                   setCharClass(profile.character_class ?? '');
+                  setMainSkillName(profile.main_skill_name ?? '');
+                  setMainSkillLevel(profile.main_skill_level?.toString() ?? '');
+                  setSubSkillName(profile.sub_skill_name ?? '');
+                  setSubSkillLevel(profile.sub_skill_level?.toString() ?? '');
                 }}
                 className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm py-2 rounded-lg transition-colors"
               >
@@ -388,6 +451,26 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
                 {profile.character_class ?? <span className="text-slate-500 italic">Not set</span>}
               </span>
             </div>
+            {(profile.main_skill_name || profile.sub_skill_name) && (
+              <div className="border-t border-slate-700 pt-2 mt-1 space-y-1">
+                {profile.main_skill_name && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 text-sm">Main Skill</span>
+                    <span className="text-white text-sm font-medium">
+                      {profile.main_skill_name}{profile.main_skill_level != null ? ` Lv.${profile.main_skill_level}` : ''}
+                    </span>
+                  </div>
+                )}
+                {profile.sub_skill_name && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 text-sm">Sub Skill</span>
+                    <span className="text-white text-sm font-medium">
+                      {profile.sub_skill_name}{profile.sub_skill_level != null ? ` Lv.${profile.sub_skill_level}` : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

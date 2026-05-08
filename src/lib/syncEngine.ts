@@ -179,3 +179,38 @@ class SyncEngineClass {
 
 /** Singleton sync engine — import this everywhere you need it. */
 export const syncEngine = new SyncEngineClass();
+
+// ── Offline draft queue (persist across tab close) ──────────────────────────
+// On page unload, snapshot any pending mutations to localStorage so they can
+// be replayed on the next session open.
+const DRAFT_QUEUE_KEY = 'war_draft_queue';
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    const pending = [...syncEngine['queue'].values()];
+    if (pending.length === 0) {
+      localStorage.removeItem(DRAFT_QUEUE_KEY);
+      return;
+    }
+    try {
+      localStorage.setItem(DRAFT_QUEUE_KEY, JSON.stringify(pending));
+    } catch {
+      // Ignore quota errors; losing the draft queue is acceptable.
+    }
+  });
+
+  // Drain any queue persisted from a previous session as soon as the module loads.
+  (async () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_QUEUE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as WarMutation[];
+      if (!Array.isArray(saved) || saved.length === 0) return;
+      localStorage.removeItem(DRAFT_QUEUE_KEY);
+      // Re-enqueue — the tick loop will flush them to DB.
+      saved.forEach((m) => syncEngine.enqueue(m));
+    } catch {
+      localStorage.removeItem(DRAFT_QUEUE_KEY);
+    }
+  })();
+}

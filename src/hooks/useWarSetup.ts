@@ -196,7 +196,7 @@ export async function preloadWarSetup(weekStart?: Date): Promise<void> {
   const weekStartStr = formatISO(getUpcomingSaturday(weekStart ?? new Date()), { representation: 'date' });
   const cached = readCache(weekStartStr);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return;
-  await loadSetupData(weekStartStr).catch(() => {});
+  await loadSetupData(weekStartStr).catch((err) => { console.error('[preloadWarSetup]', err); });
 }
 
 export function useWarSetup(weekStart?: Date) {
@@ -446,6 +446,34 @@ export function useWarSetup(weekStart?: Date) {
     syncEngine.enqueue({ key: `${setupId}:${userId2}`, setupId, userId: userId2, op: 'assign', partyId: partyId1, position: position1, isSubstitute: isSubstitute1 });
   };
 
+  /** Update the icon field on a war_party row. Optimistic: updates local state instantly. */
+  const updatePartyIcon = async (partyId: string, icon: string | null) => {
+    let updatedData: WarSetupData | null = null;
+    setData((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        groups: prev.groups.map((g) => ({
+          ...g,
+          parties: g.parties.map((p) =>
+            p.party.id === partyId ? { ...p, party: { ...p.party, icon } } : p
+          ),
+        })),
+      };
+      updatedData = next;
+      return next;
+    });
+    const { error: err } = await supabase
+      .from('war_parties')
+      .update({ icon })
+      .eq('id', partyId);
+    if (err) {
+      console.error('[useWarSetup] updatePartyIcon:', err);
+    } else if (updatedData) {
+      writeCache(weekStartStr, updatedData);
+    }
+  };
+
   return {
     data,
     loading,
@@ -458,5 +486,6 @@ export function useWarSetup(weekStart?: Date) {
     assignMember,
     removeMember,
     swapMembers,
+    updatePartyIcon,
   };
 }

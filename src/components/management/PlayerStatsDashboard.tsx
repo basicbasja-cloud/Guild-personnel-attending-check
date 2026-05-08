@@ -21,9 +21,11 @@ interface PlayerStat {
   non_select: number;
   total: number;
   attendance_rate: number; // (join + maybe) / total
+  main_skill: string;
+  sub_skill: string;
 }
 
-type SortKey = 'username' | 'join' | 'maybe' | 'not_join' | 'non_select' | 'attendance_rate';
+type SortKey = 'username' | 'join' | 'maybe' | 'not_join' | 'non_select' | 'attendance_rate' | 'main_skill' | 'sub_skill';
 
 function buildWeekStrs(count: number): string[] {
   const today = new Date();
@@ -70,7 +72,13 @@ export function PlayerStatsDashboard() {
       const non_select = Math.max(0, HISTORY_WEEKS - responded);
       const total = HISTORY_WEEKS;
       const attendance_rate = total > 0 ? Math.round(((s.join + s.maybe) / total) * 100) : 0;
-      return { profile: p, join: s.join, maybe: s.maybe, not_join: s.not_join, non_select, total, attendance_rate };
+      const main_skill = p.main_skill_name
+        ? `${p.main_skill_name}${p.main_skill_level != null ? ` Lv.${p.main_skill_level}` : ''}`
+        : '';
+      const sub_skill = p.sub_skill_name
+        ? `${p.sub_skill_name}${p.sub_skill_level != null ? ` Lv.${p.sub_skill_level}` : ''}`
+        : '';
+      return { profile: p, join: s.join, maybe: s.maybe, not_join: s.not_join, non_select, total, attendance_rate, main_skill, sub_skill };
     });
   }, [profiles, rows]);
 
@@ -87,8 +95,8 @@ export function PlayerStatsDashboard() {
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const av = sortKey === 'username' ? a.profile.username : a[sortKey];
-      const bv = sortKey === 'username' ? b.profile.username : b[sortKey];
+      const av = sortKey === 'username' ? a.profile.username : sortKey === 'main_skill' || sortKey === 'sub_skill' ? a[sortKey] : a[sortKey];
+      const bv = sortKey === 'username' ? b.profile.username : sortKey === 'main_skill' || sortKey === 'sub_skill' ? b[sortKey] : b[sortKey];
       if (av < bv) return sortDesc ? 1 : -1;
       if (av > bv) return sortDesc ? -1 : 1;
       return 0;
@@ -106,6 +114,8 @@ export function PlayerStatsDashboard() {
         Username: s.profile.username,
         'Character Name': s.profile.character_name ?? '',
         Class: s.profile.character_class ?? '',
+        'Main Skill': s.main_skill,
+        'Sub Skill': s.sub_skill,
         Join: s.join,
         Maybe: s.maybe,
         "Can't Join": s.not_join,
@@ -164,6 +174,8 @@ export function PlayerStatsDashboard() {
                 <tr>
                   <Th label="Player" k="username" />
                   <th className="px-3 py-3 text-xs font-semibold text-slate-400 text-left">Class</th>
+                  <Th label="⚡ Main Skill" k="main_skill" />
+                  <Th label="✦ Sub Skill" k="sub_skill" />
                   <Th label="✅ Join" k="join" right />
                   <Th label="🤔 Maybe" k="maybe" right />
                   <Th label="❌ Can't" k="not_join" right />
@@ -174,7 +186,7 @@ export function PlayerStatsDashboard() {
               <tbody className="divide-y divide-slate-800">
                 {sorted.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center text-slate-500 py-10">No players found.</td>
+                    <td colSpan={9} className="text-center text-slate-500 py-10">No players found.</td>
                   </tr>
                 )}
                 {sorted.map((s) => {
@@ -203,6 +215,16 @@ export function PlayerStatsDashboard() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-slate-400 text-xs">{s.profile.character_class ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {s.main_skill ? (
+                          <span className="px-1.5 py-0.5 rounded bg-violet-700/40 text-violet-200 border border-violet-600/30">{s.main_skill}</span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {s.sub_skill ? (
+                          <span className="px-1.5 py-0.5 rounded bg-sky-700/40 text-sky-200 border border-sky-600/30">{s.sub_skill}</span>
+                        ) : <span className="text-slate-600">—</span>}
+                      </td>
                       <td className="px-3 py-2.5 text-right">
                         <span className="text-emerald-400 font-semibold">{s.join}</span>
                       </td>

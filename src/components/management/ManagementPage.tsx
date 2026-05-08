@@ -16,7 +16,7 @@ import { useWarSetup } from '../../hooks/useWarSetup';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
-import type { Profile } from '../../types';
+import type { Profile, WarPartyMember } from '../../types';
 import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
 import { downloadCsv } from '../../lib/exportCsv';
@@ -95,20 +95,18 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     const counts = new Map<string, number>();
 
     const groups = Array.isArray(war.data.groups) ? war.data.groups : [];
+    const allMembers: WarPartyMember[] = [];
 
-    const allMembers: (typeof groups[number] extends { parties: infer P } ? (P extends Array<infer U> ? U extends { members: infer M } ? (M extends Array<infer T> ? T : any) : any : any) : any)[] = [];
     for (const g of groups) {
-      const parties = Array.isArray((g as any).parties) ? (g as any).parties : [];
-      for (const p of parties) {
-        const members = Array.isArray((p as any).members) ? (p as any).members : [];
-        for (const m of members) {
-          if (m) allMembers.push(m as any);
+      for (const p of Array.isArray(g.parties) ? g.parties : []) {
+        for (const m of Array.isArray(p.members) ? p.members : []) {
+          if (m) allMembers.push(m);
         }
       }
     }
 
     for (const m of allMembers) {
-      const cls = (m as any).profile?.character_class ?? 'Unknown';
+      const cls = m.profile?.character_class ?? 'Unknown';
       counts.set(cls, (counts.get(cls) ?? 0) + 1);
     }
 

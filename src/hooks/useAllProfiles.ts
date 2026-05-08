@@ -36,7 +36,7 @@ async function fetchAndCache(): Promise<Profile[]> {
     supabase
       .from('profiles')
       .select(
-        'id,discord_id,username,avatar_url,character_name,character_class,is_management,is_admin,created_at'
+        'id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at'
       )
       .order('username')
   );
@@ -77,7 +77,7 @@ export async function preloadProfiles(): Promise<void> {
     memCache = local;
     return;
   }
-  await fetchAndCache().catch(() => {});
+  await fetchAndCache().catch((err) => { console.error('[preloadProfiles]', err); });
 }
 
 export function useAllProfiles(enabled = true) {

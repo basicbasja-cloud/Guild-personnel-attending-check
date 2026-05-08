@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/auth/LoginPage';
 import { Header } from './components/layout/Header';
@@ -7,18 +7,47 @@ import { ManagementPage } from './components/management/ManagementPage';
 import { RosterPage } from './components/management/RosterPage';
 import { AdminModePage } from './components/management/AdminModePage';
 import { PlayerStatsDashboard } from './components/management/PlayerStatsDashboard';
+import { LeagueBoardPage } from './components/league/LeagueBoardPage';
+import type { PartySummaryWithMembers } from './components/league/LeagueBoardPage';
 import { preloadProfiles } from './hooks/useAllProfiles';
 import { preloadAttendance } from './hooks/useAttendance';
-import { preloadWarSetup } from './hooks/useWarSetup';
+import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
-type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard';
+type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league';
 
 function AppContent() {
   const auth = useAuth();
   const [tab, setTab] = useState<Tab>('attendance');
   const isGoogleLoginEnabled = import.meta.env.VITE_ENABLE_GOOGLE_LOGIN === 'true';
+  const warSetup = useWarSetup();
+
+  // Flat list of all parties with full member data (for League Board)
+  const partySummaries = useMemo((): PartySummaryWithMembers[] => {
+    if (!warSetup.data) return [];
+    return warSetup.data.groups.flatMap((g) =>
+      g.parties.map((p) => ({
+        id: p.party.id,
+        groupName: g.group.name,
+        partyNumber: p.party.party_number,
+        icon: p.party.icon,
+        members: p.members
+          .filter((m) => m.profile != null)
+          .map((m) => ({
+            id: m.user_id,
+            username: m.profile!.username,
+            characterName: m.profile!.character_name,
+            characterClass: m.profile!.character_class,
+            mainSkillName: m.profile!.main_skill_name,
+            mainSkillLevel: m.profile!.main_skill_level,
+            subSkillName: m.profile!.sub_skill_name,
+            subSkillLevel: m.profile!.sub_skill_level,
+            avatarUrl: m.profile!.avatar_url,
+          })),
+      }))
+    );
+  }, [warSetup.data]);
 
   // Preload all data into cache as soon as the user is authenticated
   // so every tab opens instantly with zero loading spinners.
@@ -71,6 +100,7 @@ function AppContent() {
     { id: 'roster', label: 'Roster', emoji: '👥' },
     { id: 'management', label: 'War Setup', emoji: '⚔️', mgmtOnly: true },
     { id: 'dashboard', label: 'Dashboard', emoji: '📊', mgmtOnly: true },
+    { id: 'league', label: 'League Board', emoji: '🗺️' },
     { id: 'admin', label: 'Admin Mode', emoji: '🔐', mgmtOnly: true },
   ];
 
@@ -122,6 +152,17 @@ function AppContent() {
           {tab === 'dashboard' && auth.profile.is_management && (
             <PlayerStatsDashboard />
           )}
+          {/* League board stays mounted to preserve state across tab switches */}
+          <div className={tab === 'league' ? '' : 'hidden'}>
+            <LeagueBoardPage
+              userId={auth.profile.id}
+              isManagement={auth.profile.is_management}
+              parties={partySummaries}
+              onUpdatePartyIcon={async (partyId, icon) => {
+                await warSetup.updatePartyIcon(partyId, icon);
+              }}
+            />
+          </div>
         </main>
       </div>
     </ClassCatalogProvider>

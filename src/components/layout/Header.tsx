@@ -1,9 +1,12 @@
+import { useState, useRef, useEffect } from 'react';
 import type { Profile } from '../../types';
 import { useSyncStatus } from '../../hooks/useSyncStatus';
+import { supabase } from '../../lib/supabase';
 
 interface HeaderProps {
   profile: Profile | null;
   onSignOut: () => void;
+  onLogoColorChange?: (color: string) => void;
 }
 
 function ConnectionBadge() {
@@ -53,12 +56,75 @@ function ConnectionBadge() {
   );
 }
 
-export function Header({ profile, onSignOut }: HeaderProps) {
+export function Header({ profile, onSignOut, onLogoColorChange }: HeaderProps) {
+  const LOGO_COLORS = [
+    { name: 'Indigo',   hex: '#4f46e5' },
+    { name: 'Violet',   hex: '#7c3aed' },
+    { name: 'Cyan',     hex: '#0891b2' },
+    { name: 'Rose',     hex: '#e11d48' },
+    { name: 'Amber',    hex: '#d97706' },
+    { name: 'Emerald',  hex: '#059669' },
+  ];
+
+  const savedColor = profile?.logo_color ?? localStorage.getItem('gwm_logo_color') ?? '#4f46e5';
+  const [logoColor, setLogoColor] = useState<string>(savedColor);
+  const [showPicker, setShowPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Sync color when profile loads (e.g. on first render after auth)
+  useEffect(() => {
+    if (profile?.logo_color) {
+      setLogoColor(profile.logo_color);
+    }
+  }, [profile?.logo_color]);
+
+  useEffect(() => {
+    if (!showPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPicker]);
+
+  const handleColorSelect = async (hex: string) => {
+    setLogoColor(hex);
+    localStorage.setItem('gwm_logo_color', hex); // fallback cache
+    setShowPicker(false);
+    onLogoColorChange?.(hex);
+    // Save to DB so it persists across devices
+    if (profile?.id) {
+      await supabase.from('profiles').update({ logo_color: hex }).eq('id', profile.id);
+    }
+  };
+
   return (
     <header className="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
-          ⚔
+        <div ref={pickerRef} className="relative">
+          <button
+            onClick={() => setShowPicker((p) => !p)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
+            style={{ backgroundColor: logoColor }}
+            title="Change logo color"
+          >
+            ⚔
+          </button>
+          {showPicker && (
+            <div className="absolute top-10 left-0 z-50 bg-slate-800 border border-slate-600 rounded-xl p-2 flex gap-1.5 shadow-2xl">
+              {LOGO_COLORS.map(({ name, hex }) => (
+                <button
+                  key={name}
+                  onClick={() => handleColorSelect(hex)}
+                  className="w-6 h-6 rounded-full hover:scale-125 transition-transform ring-offset-slate-800"
+                  style={{ backgroundColor: hex, outline: logoColor === hex ? `2px solid white` : 'none', outlineOffset: '2px' }}
+                  title={name}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <h1 className="text-white font-bold text-lg hidden sm:block">Guild War Manager</h1>
       </div>

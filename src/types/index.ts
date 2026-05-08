@@ -7,8 +7,13 @@ export interface Profile {
   avatar_url: string | null;
   character_name: string | null;
   character_class: string | null;
+  main_skill_name: string | null;
+  main_skill_level: number | null;
+  sub_skill_name: string | null;
+  sub_skill_level: number | null;
   is_management: boolean;
   is_admin: boolean;
+  logo_color: string | null;
   created_at: string;
 }
 
@@ -44,6 +49,7 @@ export interface WarParty {
   id: string;
   group_id: string;
   party_number: number;
+  icon: string | null;
   created_at: string;
 }
 

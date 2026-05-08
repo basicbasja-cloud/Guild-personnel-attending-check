@@ -48,7 +48,7 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
         () =>
           supabase
             .from('profiles')
-            .select('id,discord_id,username,avatar_url,character_name,character_class,is_management,is_admin,created_at')
+            .select('id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at')
             .in('id', allProfileIds)
       );
       if (!profilesErr) {
@@ -113,7 +113,7 @@ export async function preloadAttendance(weekStart?: Date): Promise<void> {
     }
   }
   if (cached && Date.now() - cached.at < WEEK_ATTENDANCE_CACHE_TTL_MS) return;
-  await fetchWeekRows(weekStartStr).catch(() => {});
+  await fetchWeekRows(weekStartStr).catch((err) => { console.error('[preloadAttendance]', err); });
 }
 
 export function useAttendance(userId: string | null, weekStart?: Date, enabled = true) {

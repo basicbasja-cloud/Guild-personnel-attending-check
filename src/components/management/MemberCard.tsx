@@ -67,6 +67,20 @@ export function MemberCard({ id, profile, origin, compact = false, isMaybe = fal
               {profile.character_class}
             </p>
           )}
+          {(profile.main_skill_name || profile.sub_skill_name) && (
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {profile.main_skill_name && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-violet-700/50 text-violet-200 border border-violet-600/40 leading-tight">
+                  ⚡{profile.main_skill_name}{profile.main_skill_level != null ? ` ${profile.main_skill_level}` : ''}
+                </span>
+              )}
+              {profile.sub_skill_name && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-sky-700/50 text-sky-200 border border-sky-600/40 leading-tight">
+                  ✦{profile.sub_skill_name}{profile.sub_skill_level != null ? ` ${profile.sub_skill_level}` : ''}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -105,6 +119,20 @@ export function MemberCard({ id, profile, origin, compact = false, isMaybe = fal
             >
               {profile.character_class}
             </span>
+          )}
+          {(profile.main_skill_name || profile.sub_skill_name) && (
+            <>
+              {profile.main_skill_name && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-violet-700/50 text-violet-200 border border-violet-600/40 leading-tight">
+                  ⚡{profile.main_skill_name}{profile.main_skill_level != null ? ` ${profile.main_skill_level}` : ''}
+                </span>
+              )}
+              {profile.sub_skill_name && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-sky-700/50 text-sky-200 border border-sky-600/40 leading-tight">
+                  ✦{profile.sub_skill_name}{profile.sub_skill_level != null ? ` ${profile.sub_skill_level}` : ''}
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>

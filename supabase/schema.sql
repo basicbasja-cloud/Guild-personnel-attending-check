@@ -585,3 +585,308 @@ select
 from auth.users u
 left join public.profiles p on p.id = u.id
 where p.id is null;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ADDITIVE MIGRATIONS (idempotent)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Dual ultimate skill fields on profiles
+alter table public.profiles add column if not exists main_skill_name  text;
+alter table public.profiles add column if not exists main_skill_level int;
+alter table public.profiles add column if not exists sub_skill_name   text;
+alter table public.profiles add column if not exists sub_skill_level  int;
+
+-- Party icon identifier on war_parties
+alter table public.war_parties add column if not exists icon text;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ADMIN PIN ATTEMPTS TABLE
+-- (Referenced by delete_user_with_pin but was not explicitly created)
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.admin_pin_attempts (
+  id           uuid        primary key default gen_random_uuid(),
+  user_id      uuid        not null references auth.users(id) on delete cascade,
+  success      boolean     not null,
+  attempted_at timestamptz not null default now()
+);
+alter table public.admin_pin_attempts enable row level security;
+create index if not exists idx_admin_pin_attempts_user_time
+  on public.admin_pin_attempts(user_id, attempted_at desc);
+-- Only the security-definer functions can insert; users cannot read
+drop policy if exists "pin_attempts_insert_auth" on public.admin_pin_attempts;
+create policy "pin_attempts_insert_auth"
+  on public.admin_pin_attempts for insert
+  with check ((select auth.role()) = 'authenticated');
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- RATE-LIMITED verify_admin_pin
+-- Replace the plain version with one that checks admin_pin_attempts.
+-- ─────────────────────────────────────────────────────────────────────────────
+drop function if exists public.verify_admin_pin(text);
+create or replace function public.verify_admin_pin(provided_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  configured_pin_hash text;
+  recent_failures     int;
+  is_correct          boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select count(*)
+    into recent_failures
+  from public.admin_pin_attempts
+  where user_id = auth.uid()
+    and success = false
+    and attempted_at > now() - interval '15 minutes';
+
+  if recent_failures >= 5 then
+    raise exception 'Too many failed attempts. Please wait 15 minutes before trying again.';
+  end if;
+
+  select admin_pin_hash
+    into configured_pin_hash
+  from public.admin_runtime_config
+  where singleton = true;
+
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured in public.admin_runtime_config';
+  end if;
+
+  is_correct := encode(digest(provided_pin, 'sha256'), 'hex') = configured_pin_hash;
+  insert into public.admin_pin_attempts (user_id, success) values (auth.uid(), is_correct);
+
+  return is_correct;
+end;
+$$;
+
+grant execute on function public.verify_admin_pin(text) to authenticated;
+revoke execute on function public.verify_admin_pin(text) from public;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- AUDIT LOG TABLE
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.audit_log (
+  id          uuid        primary key default gen_random_uuid(),
+  actor_id    uuid        references public.profiles(id) on delete set null,
+  action      text        not null,
+  target_type text,
+  target_id   text,
+  details     jsonb,
+  created_at  timestamptz not null default now()
+);
+alter table public.audit_log enable row level security;
+create index if not exists idx_audit_log_created_at on public.audit_log(created_at desc);
+create index if not exists idx_audit_log_actor_id   on public.audit_log(actor_id);
+-- Management can read; any authenticated user can insert (via app code)
+drop policy if exists "audit_log_select_mgmt" on public.audit_log;
+create policy "audit_log_select_mgmt"
+  on public.audit_log for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and is_management = true
+    )
+  );
+drop policy if exists "audit_log_insert_auth" on public.audit_log;
+create policy "audit_log_insert_auth"
+  on public.audit_log for insert
+  with check ((select auth.role()) = 'authenticated');
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- GUILD LEAGUE STRATEGIC MAP BOARD TABLES
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Seasons group a set of strategy plans
+create table if not exists public.league_seasons (
+  id         uuid        primary key default gen_random_uuid(),
+  name       text        not null,
+  created_at timestamptz not null default now()
+);
+alter table public.league_seasons enable row level security;
+drop policy if exists "league_seasons_select_mgmt" on public.league_seasons;
+create policy "league_seasons_select_mgmt"
+  on public.league_seasons for select
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+drop policy if exists "league_seasons_write_mgmt" on public.league_seasons;
+create policy "league_seasons_write_mgmt"
+  on public.league_seasons for all
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  )
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- Named strategy plans (up to N per season)
+create table if not exists public.league_plans (
+  id         uuid        primary key default gen_random_uuid(),
+  season_id  uuid        not null references public.league_seasons(id) on delete cascade,
+  name       text        not null,
+  sort_order int         not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table public.league_plans enable row level security;
+drop policy if exists "league_plans_select_mgmt" on public.league_plans;
+create policy "league_plans_select_mgmt"
+  on public.league_plans for select
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+drop policy if exists "league_plans_write_mgmt" on public.league_plans;
+create policy "league_plans_write_mgmt"
+  on public.league_plans for all
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  )
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- Assigns a war party to a map zone with a status within a plan
+create table if not exists public.league_zone_assignments (
+  id         uuid        primary key default gen_random_uuid(),
+  plan_id    uuid        not null references public.league_plans(id) on delete cascade,
+  zone_id    text        not null,   -- matches leagueMapLayout.ts zone id strings
+  party_id   uuid        references public.war_parties(id) on delete set null,
+  status     text        not null default 'neutral' check (status in ('friendly','enemy','neutral')),
+  note       text,
+  updated_at timestamptz not null default now(),
+  constraint uq_plan_zone_party unique (plan_id, zone_id, party_id)
+);
+alter table public.league_zone_assignments enable row level security;
+create index if not exists idx_lza_plan_id on public.league_zone_assignments(plan_id);
+drop policy if exists "league_zone_assignments_select_mgmt" on public.league_zone_assignments;
+create policy "league_zone_assignments_select_mgmt"
+  on public.league_zone_assignments for select
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+drop policy if exists "league_zone_assignments_write_mgmt" on public.league_zone_assignments;
+create policy "league_zone_assignments_write_mgmt"
+  on public.league_zone_assignments for all
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  )
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- Attack wave arrows: directed edges between map zones
+create table if not exists public.league_arrows (
+  id           uuid        primary key default gen_random_uuid(),
+  plan_id      uuid        not null references public.league_plans(id) on delete cascade,
+  from_zone_id text        not null,
+  to_zone_id   text        not null,
+  phase        int         not null default 1 check (phase between 1 and 3),
+  label        text,
+  created_at   timestamptz not null default now(),
+  constraint uq_arrow_plan_zones unique (plan_id, from_zone_id, to_zone_id, phase)
+);
+alter table public.league_arrows enable row level security;
+create index if not exists idx_arrows_plan_id on public.league_arrows(plan_id);
+drop policy if exists "league_arrows_select_mgmt" on public.league_arrows;
+create policy "league_arrows_select_mgmt"
+  on public.league_arrows for select
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+drop policy if exists "league_arrows_write_mgmt" on public.league_arrows;
+create policy "league_arrows_write_mgmt"
+  on public.league_arrows for all
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  )
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION: League board – party-based free-placement system
+-- Run this block once in your Supabase SQL editor (idempotent).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- 1. Make zone_id nullable in league_zone_assignments (party rows use party_id instead)
+do $$ begin
+  alter table public.league_zone_assignments alter column zone_id drop not null;
+exception when others then null;
+end $$;
+
+-- 2. Add free-placement position columns (0–100 %) to league_zone_assignments
+alter table public.league_zone_assignments
+  add column if not exists pos_x float not null default 50,
+  add column if not exists pos_y float not null default 50;
+
+-- 3. Replace the (plan_id, zone_id, party_id) constraint with (plan_id, party_id)
+do $$ begin
+  alter table public.league_zone_assignments drop constraint uq_plan_zone_party;
+exception when others then null;
+end $$;
+-- Unique index allows multiple NULL party_ids (enemy markers) while preventing
+-- the same war-party from being placed twice in one plan.
+create unique index if not exists uq_lza_plan_party
+  on public.league_zone_assignments (plan_id, party_id)
+  where party_id is not null;
+
+-- 4. Add party_id reference columns to league_arrows
+alter table public.league_arrows
+  add column if not exists from_party_id uuid references public.war_parties(id) on delete cascade,
+  add column if not exists to_party_id   uuid references public.war_parties(id) on delete cascade;
+
+-- 5. Make legacy zone columns nullable in league_arrows
+do $$ begin
+  alter table public.league_arrows alter column from_zone_id drop not null;
+exception when others then null;
+end $$;
+do $$ begin
+  alter table public.league_arrows alter column to_zone_id drop not null;
+exception when others then null;
+end $$;
+
+-- 6. Replace the zone-based unique constraint with a party-based one
+do $$ begin
+  alter table public.league_arrows drop constraint uq_arrow_plan_zones;
+exception when others then null;
+end $$;
+-- Unique index enables ON CONFLICT upsert on (plan_id, from_party_id, to_party_id, phase).
+-- NULL party_ids are treated as distinct (NULLS DISTINCT) so legacy rows are unaffected.
+create unique index if not exists uq_arrow_plan_parties
+  on public.league_arrows (plan_id, from_party_id, to_party_id, phase)
+  where from_party_id is not null and to_party_id is not null;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION: Open league board read access to all authenticated users
+-- Management retains full write access; normal members get read-only view.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+drop policy if exists "league_seasons_select_mgmt" on public.league_seasons;
+drop policy if exists "league_seasons_select_auth" on public.league_seasons;
+create policy "league_seasons_select_auth"
+  on public.league_seasons for select
+  using ((select auth.role()) = 'authenticated');
+
+drop policy if exists "league_plans_select_mgmt" on public.league_plans;
+drop policy if exists "league_plans_select_auth" on public.league_plans;
+create policy "league_plans_select_auth"
+  on public.league_plans for select
+  using ((select auth.role()) = 'authenticated');
+
+drop policy if exists "league_zone_assignments_select_mgmt" on public.league_zone_assignments;
+drop policy if exists "league_zone_assignments_select_auth" on public.league_zone_assignments;
+create policy "league_zone_assignments_select_auth"
+  on public.league_zone_assignments for select
+  using ((select auth.role()) = 'authenticated');
+
+drop policy if exists "league_arrows_select_mgmt" on public.league_arrows;
+drop policy if exists "league_arrows_select_auth" on public.league_arrows;
+create policy "league_arrows_select_auth"
+  on public.league_arrows for select
+  using ((select auth.role()) = 'authenticated');
+

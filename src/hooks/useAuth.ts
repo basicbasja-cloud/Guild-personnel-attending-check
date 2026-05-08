@@ -494,7 +494,7 @@ export function useAuth() {
     localStorage.removeItem(PROFILE_CACHE_KEY);
   };
 
-  const updateProfile = async (updates: Partial<Pick<Profile, 'character_name' | 'character_class'>>) => {
+  const updateProfile = async (updates: Partial<Pick<Profile, 'character_name' | 'character_class' | 'main_skill_name' | 'main_skill_level' | 'sub_skill_name' | 'sub_skill_level' | 'logo_color'>>) => {
     if (!state.user) return;
     const { data, error } = await supabase
       .from('profiles')
