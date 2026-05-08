@@ -44,7 +44,7 @@ export function AuditLogModal({ onClose }: AuditLogModalProps) {
 
     if (filter !== 'all') query.eq('action', filter);
 
-    query.then(({ data }) => {
+    Promise.resolve(query).then(({ data }) => {
       if (cancelled) return;
       setEntries((data as AuditEntry[]) ?? []);
       setLoading(false);
