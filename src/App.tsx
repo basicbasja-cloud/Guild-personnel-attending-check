@@ -180,7 +180,7 @@ function AppContent() {
           </div>
           {/* Calendar stays mounted to preserve scroll position */}
           <div className={tab === 'calendar' ? '' : 'hidden'}>
-            <GuildCalendarPage isManagement={auth.profile.is_management} />
+            <GuildCalendarPage isManagement={auth.profile.is_management} userId={auth.profile.id} />
           </div>
         </main>
       </div>

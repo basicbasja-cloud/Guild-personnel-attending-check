@@ -32,7 +32,11 @@ export async function preloadGuildEvents() {
     .from('guild_events')
     .select('*')
     .order('event_date', { ascending: true, nullsFirst: false });
-  if (!error && data) writeCache(data as GuildEvent[]);
+  if (error) {
+    console.error('[useGuildEvents] preload:', error);
+    return;
+  }
+  if (data) writeCache(data as GuildEvent[]);
 }
 
 export interface UseGuildEventsReturn {
@@ -62,7 +66,11 @@ export function useGuildEvents(): UseGuildEventsReturn {
       .select('*')
       .order('event_date', { ascending: true, nullsFirst: false });
     setLoading(false);
-    if (!error && data) {
+    if (error) {
+      console.error('[useGuildEvents] fetchAll:', error);
+      return;
+    }
+    if (data) {
       const evs = data as GuildEvent[];
       setEvents(evs);
       writeCache(evs);
@@ -97,6 +105,7 @@ export function useGuildEvents(): UseGuildEventsReturn {
     setEvents((prev) => { const next = [...prev, optimistic]; writeCache(next); return next; });
     const { data, error } = await supabase.from('guild_events').insert(payload).select().single();
     if (error) {
+      console.error('[useGuildEvents] createEvent:', error);
       setEvents((prev) => { const next = prev.filter((e) => e.id !== tempId); writeCache(next); return next; });
     } else {
       const saved = data as GuildEvent;
@@ -111,7 +120,8 @@ export function useGuildEvents(): UseGuildEventsReturn {
       writeCache(next);
       return next;
     });
-    await supabase.from('guild_events').update({ ...patch, updated_at: now }).eq('id', id);
+    const { error } = await supabase.from('guild_events').update({ ...patch, updated_at: now }).eq('id', id);
+    if (error) console.error('[useGuildEvents] updateEvent:', error);
   }, []);
 
   const updateEventDate = useCallback(async (id: string, eventDate: string | null) => {
@@ -120,7 +130,8 @@ export function useGuildEvents(): UseGuildEventsReturn {
 
   const deleteEvent = useCallback(async (id: string) => {
     setEvents((prev) => { const next = prev.filter((e) => e.id !== id); writeCache(next); return next; });
-    await supabase.from('guild_events').delete().eq('id', id);
+    const { error } = await supabase.from('guild_events').delete().eq('id', id);
+    if (error) console.error('[useGuildEvents] deleteEvent:', error);
   }, []);
 
   return { events, loading, refresh: fetchAll, createEvent, updateEvent, updateEventDate, deleteEvent };
