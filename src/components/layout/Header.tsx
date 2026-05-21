@@ -7,6 +7,8 @@ interface HeaderProps {
   profile: Profile | null;
   onSignOut: () => void;
   onLogoColorChange?: (color: string) => void;
+  /** When provided the avatar/name area becomes a clickable button to open the user's own profile */
+  onProfileClick?: () => void;
 }
 
 function ConnectionBadge() {
@@ -56,7 +58,7 @@ function ConnectionBadge() {
   );
 }
 
-export function Header({ profile, onSignOut, onLogoColorChange }: HeaderProps) {
+export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }: HeaderProps) {
   const LOGO_COLORS = [
     { name: 'Indigo',   hex: '#4f46e5' },
     { name: 'Violet',   hex: '#7c3aed' },
@@ -132,26 +134,34 @@ export function Header({ profile, onSignOut, onLogoColorChange }: HeaderProps) {
       {profile && (
         <div className="flex items-center gap-3">
           <ConnectionBadge />
-          {profile.avatar_url ? (
-            <img
-              src={profile.avatar_url}
-              alt={profile.username}
-              className="w-8 h-8 rounded-full border-2 border-indigo-500"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center text-white text-xs font-bold">
-              {profile.username.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div className="hidden sm:block text-right">
-            <p className="text-white text-sm font-medium leading-tight">{profile.username}</p>
-            {profile.character_name && (
-              <p className="text-slate-400 text-xs leading-tight">
-                {profile.character_name}
-                {profile.character_class ? ` · ${profile.character_class}` : ''}
-              </p>
+          <button
+            onClick={onProfileClick}
+            disabled={!onProfileClick}
+            className={`flex items-center gap-2 rounded-lg px-1 py-0.5 transition-colors
+              ${onProfileClick ? 'hover:bg-slate-700 cursor-pointer' : 'cursor-default'}`}
+            title={onProfileClick ? 'My Profile' : undefined}
+          >
+            {profile.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={profile.username}
+                className="w-8 h-8 rounded-full border-2 border-indigo-500"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center text-white text-xs font-bold">
+                {profile.username.charAt(0).toUpperCase()}
+              </div>
             )}
-          </div>
+            <div className="hidden sm:block text-right">
+              <p className="text-white text-sm font-medium leading-tight">{profile.username}</p>
+              {profile.character_name && (
+                <p className="text-slate-400 text-xs leading-tight">
+                  {profile.character_name}
+                  {profile.character_class ? ` · ${profile.character_class}` : ''}
+                </p>
+              )}
+            </div>
+          </button>
           {profile.is_management ? (
             <span className="bg-indigo-700 text-indigo-100 text-xs px-2 py-0.5 rounded-full font-medium">
               GM

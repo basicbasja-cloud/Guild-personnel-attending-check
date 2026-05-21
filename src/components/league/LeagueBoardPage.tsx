@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useLeagueBoard } from '../../hooks/useLeagueBoard';
-import type { LeagueZoneAssignment, LeagueDrawing } from '../../hooks/useLeagueBoard';
+import type { LeagueZoneAssignment, LeagueDrawing, HistoricParty } from '../../hooks/useLeagueBoard';
 import { PARTY_ICONS, ICON_GLYPHS, PHASE_COLORS } from '../../lib/leagueMapLayout';
 import type { PartyIcon } from '../../lib/leagueMapLayout';
 
@@ -276,7 +276,17 @@ export function LeagueBoardPage({ userId: _userId, isManagement, parties, onUpda
   const planDrawings      = useMemo(() => board.drawings.filter((d) => d.plan_id === board.activePlanId), [board.drawings, board.activePlanId]);
   const assignmentByPartyId = useMemo(() => new Map(planAssignments.filter((a) => a.party_id).map((a) => [a.party_id!, a])), [planAssignments]);
   const enemyAssignments    = useMemo(() => planAssignments.filter((a) => !a.party_id), [planAssignments]);
-  const partyById           = useMemo(() => new Map(parties.map((p) => [p.id, p])), [parties]);
+  const partyById = useMemo(() => {
+    const map = new Map<string, PartySummaryWithMembers>(parties.map((p) => [p.id, p]));
+    // Merge historic parties fetched alongside plan data so that icons from
+    // previous weeks' war_parties still render correctly.
+    for (const hp of (board.historicParties ?? []) as HistoricParty[]) {
+      if (!map.has(hp.id)) {
+        map.set(hp.id, { id: hp.id, groupName: hp.groupName, partyNumber: hp.partyNumber, icon: hp.icon, members: [] });
+      }
+    }
+    return map;
+  }, [parties, board.historicParties]);
   const placedPartyIds      = useMemo(() => new Set(assignmentByPartyId.keys()), [assignmentByPartyId]);
   const unplacedParties     = useMemo(() => parties.filter((p) => !placedPartyIds.has(p.id)), [parties, placedPartyIds]);
   const placedParties       = useMemo(() => parties.filter((p) =>  placedPartyIds.has(p.id)), [parties, placedPartyIds]);

@@ -54,12 +54,22 @@ export interface LeagueDrawing {
 
 // ─── Hook state ──────────────────────────────────────────────────────────────
 
+/** Minimal party info fetched from war_parties for plans that reference older weeks */
+export interface HistoricParty {
+  id: string;
+  groupName: string;
+  partyNumber: number;
+  icon: string | null;
+}
+
 interface LeagueBoardState {
   seasons: LeagueSeason[];
   plans: LeaguePlan[];
   assignments: LeagueZoneAssignment[];
   arrows: LeagueArrow[];
   drawings: LeagueDrawing[];
+  /** Party stubs fetched when a plan is loaded, keyed by party id */
+  historicParties: HistoricParty[];
   activePlanId: string | null;
   loading: boolean;
   error: string | null;
@@ -109,6 +119,7 @@ export function useLeagueBoard(): UseLeagueBoardReturn {
     assignments: [],
     arrows: [],
     drawings: [],
+    historicParties: [],
     activePlanId: null,
     loading: true,
     error: null,
@@ -153,9 +164,37 @@ export function useLeagueBoard(): UseLeagueBoardReturn {
       if (assignRes.error) throw assignRes.error;
       if (arrowRes.error) throw arrowRes.error;
       if (drawRes.error) throw drawRes.error;
+
+      const assignments = (assignRes.data ?? []) as LeagueZoneAssignment[];
+
+      // Fetch party icon + name for every party referenced in this plan so icons
+      // render correctly even when the plan was created in a previous week.
+      const partyIds = [...new Set(assignments.map((a) => a.party_id).filter(Boolean) as string[])];
+      let historicParties: HistoricParty[] = [];
+      if (partyIds.length > 0) {
+        const { data: partyRows } = await supabase
+          .from('war_parties')
+          .select('id, icon, party_number, group_id, war_groups!inner(name)')
+          .in('id', partyIds);
+        if (partyRows) {
+          historicParties = (partyRows as unknown as Array<{
+            id: string;
+            icon: string | null;
+            party_number: number;
+            war_groups: { name: string };
+          }>).map((r) => ({
+            id: r.id,
+            icon: r.icon,
+            partyNumber: r.party_number,
+            groupName: r.war_groups.name,
+          }));
+        }
+      }
+
       setState((s) => ({
         ...s,
-        assignments: (assignRes.data ?? []) as LeagueZoneAssignment[],
+        assignments,
+        historicParties,
         arrows: (arrowRes.data ?? []) as LeagueArrow[],
         drawings: (drawRes.data ?? []).map((d) => ({
           ...d,

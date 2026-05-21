@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/auth/LoginPage';
 import { Header } from './components/layout/Header';
@@ -9,24 +9,31 @@ import { AdminModePage } from './components/management/AdminModePage';
 import { PlayerStatsDashboard } from './components/management/PlayerStatsDashboard';
 import { LeagueBoardPage } from './components/league/LeagueBoardPage';
 import type { PartySummaryWithMembers } from './components/league/LeagueBoardPage';
+import { GuildCalendarPage } from './components/calendar/GuildCalendarPage';
+import { ProfilePage } from './components/profile/ProfilePage';
 import { preloadProfiles } from './hooks/useAllProfiles';
 import { preloadAttendance } from './hooks/useAttendance';
 import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
+import { preloadGuildEvents } from './hooks/useGuildEvents';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
-type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league';
+type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league' | 'calendar';
 
 function AppContent() {
   const auth = useAuth();
   const [tab, setTab] = useState<Tab>('attendance');
   const isGoogleLoginEnabled = import.meta.env.VITE_ENABLE_GOOGLE_LOGIN === 'true';
   const warSetup = useWarSetup();
+  const [myProfileOpen, setMyProfileOpen] = useState(false);
 
-  // Flat list of all parties with full member data (for League Board)
+  // Flat list of all parties with full member data (for League Board).
+  // Preserve the last non-empty list so the board never briefly shows empty
+  // icons while warSetup data reloads (e.g. after a tab switch).
+  const lastPartiesRef = useRef<PartySummaryWithMembers[]>([]);
   const partySummaries = useMemo((): PartySummaryWithMembers[] => {
-    if (!warSetup.data) return [];
-    return warSetup.data.groups.flatMap((g) =>
+    if (!warSetup.data) return lastPartiesRef.current;
+    const fresh = warSetup.data.groups.flatMap((g) =>
       g.parties.map((p) => ({
         id: p.party.id,
         groupName: g.group.name,
@@ -47,6 +54,8 @@ function AppContent() {
           })),
       }))
     );
+    if (fresh.length > 0) lastPartiesRef.current = fresh;
+    return fresh.length > 0 ? fresh : lastPartiesRef.current;
   }, [warSetup.data]);
 
   // Preload all data into cache as soon as the user is authenticated
@@ -56,6 +65,7 @@ function AppContent() {
       preloadProfiles().catch(() => {});
       preloadAttendance().catch(() => {});
       preloadWarSetup().catch(() => {});
+      preloadGuildEvents().catch(() => {});
     }
   }, [auth.user?.id]);
 
@@ -101,6 +111,7 @@ function AppContent() {
     { id: 'management', label: 'War Setup', emoji: '⚔️', mgmtOnly: true },
     { id: 'dashboard', label: 'Dashboard', emoji: '📊', mgmtOnly: true },
     { id: 'league', label: 'League Board', emoji: '🗺️' },
+    { id: 'calendar', label: 'Guild Event Schedule', emoji: '📅' },
     { id: 'admin', label: 'Admin Mode', emoji: '🔐', mgmtOnly: true },
   ];
 
@@ -114,7 +125,11 @@ function AppContent() {
   return (
     <ClassCatalogProvider>
       <div className="min-h-screen bg-slate-950 flex flex-col">
-        <Header profile={auth.profile} onSignOut={auth.signOut} />
+        <Header
+            profile={auth.profile}
+            onSignOut={auth.signOut}
+            onProfileClick={() => setMyProfileOpen(true)}
+          />
 
         {/* Tab navigation */}
         <div className="bg-slate-900 border-b border-slate-700 px-3 sm:px-4 overflow-x-auto">
@@ -142,7 +157,7 @@ function AppContent() {
           {tab === 'attendance' && (
             <AttendancePage profile={auth.profile} onUpdateProfile={auth.updateProfile} />
           )}
-          {tab === 'roster' && <RosterPage />}
+          {tab === 'roster' && <RosterPage userId={auth.profile.id} isManagement={auth.profile.is_management} />}
           {tab === 'management' && (
             <ManagementPage userId={auth.profile.id} canEdit={auth.profile.is_management} />
           )}
@@ -163,8 +178,23 @@ function AppContent() {
               }}
             />
           </div>
+          {/* Calendar stays mounted to preserve scroll position */}
+          <div className={tab === 'calendar' ? '' : 'hidden'}>
+            <GuildCalendarPage isManagement={auth.profile.is_management} />
+          </div>
         </main>
       </div>
+
+      {/* My Profile modal — always editable (own profile) */}
+      {myProfileOpen && (
+        <ProfilePage
+          userId={auth.profile.id}
+          currentUserId={auth.profile.id}
+          isManagement={auth.profile.is_management}
+          readOnly={false}
+          onClose={() => setMyProfileOpen(false)}
+        />
+      )}
     </ClassCatalogProvider>
   );
 }

@@ -11,9 +11,11 @@ interface GroupBoardProps {
   maybeUserIds: Set<string>;
   canEdit: boolean;
   partyNumberOffset?: number;
+  swappingPartyId?: string | null;
+  onPartySwapClick?: (partyId: string) => void;
 }
 
-export function GroupBoard({ groupData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0 }: GroupBoardProps) {
+export function GroupBoard({ groupData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0, swappingPartyId, onPartySwapClick }: GroupBoardProps) {
   const { group, parties } = groupData;
   const totalMembers = parties.reduce((sum, p) => sum + p.members.length, 0);
 
@@ -48,6 +50,9 @@ export function GroupBoard({ groupData, onRemoveMember, maybeUserIds, canEdit, p
             maybeUserIds={maybeUserIds}
             canEdit={canEdit}
             partyNumberOffset={partyNumberOffset}
+            isSwapSource={swappingPartyId === partyData.party.id}
+            isSwapTarget={swappingPartyId !== null && swappingPartyId !== partyData.party.id}
+            onSwapClick={() => onPartySwapClick?.(partyData.party.id)}
           />
         ))}
       </div>

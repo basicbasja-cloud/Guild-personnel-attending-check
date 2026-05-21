@@ -72,11 +72,6 @@ export function ClassCatalogProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshClassCatalog = useCallback(async () => {
-    // Skip network call if already fetched this session.
-    if (cachedCatalog !== null) {
-      setClassCatalog(cachedCatalog);
-      return;
-    }
     const { data, error } = await supabase
       .from('class_catalog')
       .select('name,color_hex')

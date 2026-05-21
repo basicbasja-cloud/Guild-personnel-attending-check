@@ -21,9 +21,10 @@ interface AttendanceListProps {
   weekStartStr: string;
   allProfiles?: Profile[];
   profilesLoading?: boolean;
+  onMemberClick?: (userId: string) => void;
 }
 
-export function AttendanceList({ attendances, weekStartStr, allProfiles, profilesLoading }: AttendanceListProps) {
+export function AttendanceList({ attendances, weekStartStr, allProfiles, profilesLoading, onMemberClick }: AttendanceListProps) {
   // Build a lookup map so we can fill in profile data for any attendance
   // row whose cached .profile is missing (e.g. stale localStorage cache).
   const profileById = new Map((allProfiles ?? []).map((p) => [p.id, p]));
@@ -102,7 +103,8 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                   return (
                   <div
                     key={a.id}
-                    className={`flex items-center gap-3 p-2 rounded-lg border ${cfg.bg} ${cfg.border}`}
+                    className={`flex items-center gap-3 p-2 rounded-lg border ${cfg.bg} ${cfg.border} ${onMemberClick ? 'cursor-pointer hover:brightness-125 transition-all' : ''}`}
+                    onClick={() => onMemberClick && onMemberClick(a.user_id)}
                   >
                     {profile?.avatar_url ? (
                       <img src={profile.avatar_url} alt={profile.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
@@ -142,7 +144,8 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
               {nonSelectProfiles.map((p) => (
                 <div
                   key={p.id}
-                  className={`flex items-center gap-3 p-2 rounded-lg border ${NON_SELECT_CONFIG.bg} ${NON_SELECT_CONFIG.border}`}
+                  className={`flex items-center gap-3 p-2 rounded-lg border ${NON_SELECT_CONFIG.bg} ${NON_SELECT_CONFIG.border} ${onMemberClick ? 'cursor-pointer hover:brightness-125 transition-all' : ''}`}
+                  onClick={() => onMemberClick && onMemberClick(p.id)}
                 >
                   {p.avatar_url ? (
                     <img src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />

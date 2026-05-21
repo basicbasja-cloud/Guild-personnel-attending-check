@@ -446,6 +446,49 @@ export function useWarSetup(weekStart?: Date) {
     syncEngine.enqueue({ key: `${setupId}:${userId2}`, setupId, userId: userId2, op: 'assign', partyId: partyId1, position: position1, isSubstitute: isSubstitute1 });
   };
 
+  /**
+   * Swap the entire member roster of two parties. Party numbers stay the same;
+   * only the members (and their slot positions) are exchanged between parties.
+   * Optimistic: both parties update instantly in UI, mutations queued to syncEngine.
+   */
+  const swapEntireParty = (setupId: string, partyAId: string, partyBId: string) => {
+    if (!data) return;
+    let partyAMembers: WarPartyMember[] = [];
+    let partyBMembers: WarPartyMember[] = [];
+    for (const g of data.groups) {
+      for (const p of g.parties) {
+        if (p.party.id === partyAId) partyAMembers = [...p.members];
+        if (p.party.id === partyBId) partyBMembers = [...p.members];
+      }
+    }
+    // Optimistic: swap party_id on every member, positions unchanged
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        groups: prev.groups.map((g) => ({
+          ...g,
+          parties: g.parties.map((p) => {
+            if (p.party.id === partyAId) {
+              return { ...p, members: partyBMembers.map((m) => ({ ...m, party_id: partyAId })) };
+            }
+            if (p.party.id === partyBId) {
+              return { ...p, members: partyAMembers.map((m) => ({ ...m, party_id: partyBId })) };
+            }
+            return p;
+          }),
+        })),
+      };
+    });
+    // Enqueue: A's members → party B, B's members → party A (keep same position)
+    for (const m of partyAMembers) {
+      syncEngine.enqueue({ key: `${setupId}:${m.user_id}`, setupId, userId: m.user_id, op: 'assign', partyId: partyBId, position: m.position, isSubstitute: false });
+    }
+    for (const m of partyBMembers) {
+      syncEngine.enqueue({ key: `${setupId}:${m.user_id}`, setupId, userId: m.user_id, op: 'assign', partyId: partyAId, position: m.position, isSubstitute: false });
+    }
+  };
+
   /** Update the icon field on a war_party row. Optimistic: updates local state instantly. */
   const updatePartyIcon = async (partyId: string, icon: string | null) => {
     let updatedData: WarSetupData | null = null;
@@ -486,6 +529,7 @@ export function useWarSetup(weekStart?: Date) {
     assignMember,
     removeMember,
     swapMembers,
+    swapEntireParty,
     updatePartyIcon,
   };
 }

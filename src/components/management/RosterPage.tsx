@@ -3,9 +3,16 @@ import { format, addWeeks } from 'date-fns';
 import { useAttendance } from '../../hooks/useAttendance';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { AttendanceList } from './AttendanceList';
+import { ProfilePage } from '../profile/ProfilePage';
 
-export function RosterPage() {
+interface RosterPageProps {
+  userId: string;
+  isManagement: boolean;
+}
+
+export function RosterPage({ userId, isManagement }: RosterPageProps) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const targetWeek = weekOffset === 0 ? undefined : addWeeks(new Date(), weekOffset);
 
   const { weekAttendances, weekStartStr, currentWeekStart } = useAttendance(null, targetWeek, true);
@@ -42,7 +49,19 @@ export function RosterPage() {
         weekStartStr={weekStartStr}
         allProfiles={allProfiles}
         profilesLoading={profilesLoading}
+        onMemberClick={setSelectedProfileId}
       />
+
+      {selectedProfileId && (
+        <ProfilePage
+          userId={selectedProfileId}
+          currentUserId={userId}
+          isManagement={isManagement}
+          readOnly={true}
+          onClose={() => setSelectedProfileId(null)}
+        />
+      )}
     </div>
   );
 }
+

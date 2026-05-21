@@ -14,6 +14,7 @@ export interface Profile {
   is_management: boolean;
   is_admin: boolean;
   logo_color: string | null;
+  notes: string | null;
   created_at: string;
 }
 
@@ -85,3 +86,27 @@ export const MAX_SUBSTITUTE_MEMBERS = 20;
 export const MAX_MEMBERS_PER_PARTY = 6;
 export const MAX_PARTIES_PER_GROUP = 5;
 export const MAX_MEMBERS_PER_GROUP = MAX_MEMBERS_PER_PARTY * MAX_PARTIES_PER_GROUP; // 30
+
+export interface ProfileSkill {
+  id: string;
+  user_id: string;
+  skill_type: 'ultimate' | 'hero';
+  skill_name: string;
+  skill_level: number | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export type GuildEventColor = 'indigo' | 'amber' | 'rose' | 'emerald' | 'sky';
+
+export interface GuildEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  event_date: string | null; // ISO date 'YYYY-MM-DD', null = unscheduled
+  start_time: string | null; // 'HH:MM' 24-hr
+  color: GuildEventColor;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}

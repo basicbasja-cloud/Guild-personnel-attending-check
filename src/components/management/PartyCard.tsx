@@ -10,9 +10,12 @@ interface PartyCardProps {
   maybeUserIds: Set<string>;
   canEdit: boolean;
   partyNumberOffset?: number;
+  isSwapSource?: boolean;
+  isSwapTarget?: boolean;
+  onSwapClick?: () => void;
 }
 
-export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0 }: PartyCardProps) {
+export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0, isSwapSource = false, isSwapTarget = false, onSwapClick }: PartyCardProps) {
   const { party, members } = partyData;
 
   const slots = Array.from({ length: MAX_MEMBERS_PER_PARTY }, (_, i) => {
@@ -21,13 +24,32 @@ export function PartyCard({ groupId, partyData, onRemoveMember, maybeUserIds, ca
   });
 
   return (
-    <div className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
+    <div className={`rounded-xl border overflow-hidden transition-all
+      ${isSwapSource ? 'border-amber-500 ring-1 ring-amber-500/60' : isSwapTarget ? 'border-indigo-500 ring-1 ring-indigo-500/60' : 'bg-slate-800/50 border-slate-700'}`}>
       {/* Party header */}
-      <div className="px-3 py-2 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
+      <div className={`px-3 py-2 border-b flex items-center justify-between transition-colors
+        ${isSwapSource ? 'bg-amber-900/40 border-amber-700' : isSwapTarget ? 'bg-indigo-900/40 border-indigo-700' : 'bg-slate-800 border-slate-700'}`}>
         <span className="text-slate-300 text-sm font-semibold">Party {party.party_number + partyNumberOffset}</span>
-        <span className="text-slate-500 text-xs">
-          {members.length}/{MAX_MEMBERS_PER_PARTY}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-slate-500 text-xs">
+            {members.length}/{MAX_MEMBERS_PER_PARTY}
+          </span>
+          {canEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSwapClick?.(); }}
+              title={isSwapSource ? 'Cancel swap' : isSwapTarget ? 'Swap with this party' : 'Swap party members'}
+              className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold transition-all
+                ${isSwapSource
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                  : isSwapTarget
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  : 'bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white'
+                }`}
+            >
+              ⇄
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Member slots */}

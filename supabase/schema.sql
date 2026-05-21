@@ -58,7 +58,7 @@ create table if not exists public.attendance (
   user_id     uuid not null references public.profiles(id) on delete cascade,
   week_start  date not null,   -- Monday of the ISO week, e.g. '2025-01-06'
   status      text not null check (status in ('join', 'not_join', 'maybe')),
-  set_by      uuid references public.profiles(id),
+  set_by      uuid references public.profiles(id) on delete set null,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   unique (user_id, week_start)
@@ -512,7 +512,7 @@ begin
     raise exception 'Admin PIN is not configured in public.admin_runtime_config';
   end if;
 
-  is_correct := crypt(provided_pin, configured_pin_hash) = configured_pin_hash;
+  is_correct := encode(digest(provided_pin, 'sha256'), 'hex') = configured_pin_hash;
   insert into public.admin_pin_attempts (user_id, success) values (auth.uid(), is_correct);
 
   if not is_correct then
@@ -697,6 +697,94 @@ drop policy if exists "audit_log_insert_auth" on public.audit_log;
 create policy "audit_log_insert_auth"
   on public.audit_log for insert
   with check ((select auth.role()) = 'authenticated');
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PROFILE NOTES + EXTRA SKILLS (idempotent)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+alter table public.profiles add column if not exists notes text;
+
+create table if not exists public.profile_skills (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  skill_type  text not null check (skill_type in ('ultimate', 'hero')),
+  skill_name  text not null,
+  skill_level int,
+  sort_order  int not null default 0,
+  created_at  timestamptz not null default now()
+);
+
+alter table public.profile_skills enable row level security;
+
+create index if not exists idx_profile_skills_user_id on public.profile_skills (user_id);
+
+drop policy if exists "profile_skills_select_all" on public.profile_skills;
+create policy "profile_skills_select_all"
+  on public.profile_skills for select using (true);
+
+drop policy if exists "profile_skills_insert_own_or_mgmt" on public.profile_skills;
+create policy "profile_skills_insert_own_or_mgmt"
+  on public.profile_skills for insert with check (
+    (select auth.uid()) = user_id
+    or exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+drop policy if exists "profile_skills_update_own_or_mgmt" on public.profile_skills;
+create policy "profile_skills_update_own_or_mgmt"
+  on public.profile_skills for update using (
+    (select auth.uid()) = user_id
+    or exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+drop policy if exists "profile_skills_delete_own_or_mgmt" on public.profile_skills;
+create policy "profile_skills_delete_own_or_mgmt"
+  on public.profile_skills for delete using (
+    (select auth.uid()) = user_id
+    or exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- GUILD EVENT SCHEDULE
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create table if not exists public.guild_events (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  description text,
+  event_date  date,                   -- null = unscheduled / sidebar draft
+  start_time  text,                   -- "HH:MM" 24-hr format, nullable
+  color       text not null default 'indigo'
+                check (color in ('indigo','amber','rose','emerald','sky')),
+  created_by  uuid not null references public.profiles(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+alter table public.guild_events enable row level security;
+
+create index if not exists idx_guild_events_date on public.guild_events (event_date);
+
+drop policy if exists "guild_events_select_all" on public.guild_events;
+create policy "guild_events_select_all"
+  on public.guild_events for select using ((select auth.role()) = 'authenticated');
+
+drop policy if exists "guild_events_insert_mgmt" on public.guild_events;
+create policy "guild_events_insert_mgmt"
+  on public.guild_events for insert with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+drop policy if exists "guild_events_update_mgmt" on public.guild_events;
+create policy "guild_events_update_mgmt"
+  on public.guild_events for update using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+drop policy if exists "guild_events_delete_mgmt" on public.guild_events;
+create policy "guild_events_delete_mgmt"
+  on public.guild_events for delete using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- GUILD LEAGUE STRATEGIC MAP BOARD TABLES

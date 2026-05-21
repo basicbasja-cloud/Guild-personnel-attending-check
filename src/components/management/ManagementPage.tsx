@@ -45,6 +45,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   const { getClassColor } = useClassCatalog();
 
   const [activeDrag, setActiveDrag] = useState<ActiveDragData | null>(null);
+  const [swappingPartyId, setSwappingPartyId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
@@ -117,6 +118,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     if (!canEdit) return;
+    setSwappingPartyId(null);
     const { active } = event;
     setActiveDrag({
       id: active.id as string,
@@ -304,6 +306,20 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     war.removeMember(war.data.setup.id, memberUserId);
   };
 
+  const handlePartySwapClick = (partyId: string) => {
+    if (!canEdit || !war.data) return;
+    if (swappingPartyId === null) {
+      setSwappingPartyId(partyId);
+      return;
+    }
+    if (swappingPartyId === partyId) {
+      setSwappingPartyId(null);
+      return;
+    }
+    war.swapEntireParty(war.data.setup.id, swappingPartyId, partyId);
+    setSwappingPartyId(null);
+  };
+
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="p-3 sm:p-4 max-w-screen-2xl mx-auto">
@@ -413,6 +429,8 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
                   maybeUserIds={maybeUserIds}
                   canEdit={canEdit}
                   partyNumberOffset={(g.group.group_number - 1) * 5}
+                  swappingPartyId={swappingPartyId}
+                  onPartySwapClick={handlePartySwapClick}
                 />
               ))}
 
