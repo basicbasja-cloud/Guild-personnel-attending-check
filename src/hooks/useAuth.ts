@@ -104,6 +104,7 @@ function buildFallbackProfile(user: User): Profile {
     sub_skill_name: null,
     sub_skill_level: null,
     logo_color: null,
+    notes: null,
     is_management: false,
     is_admin: false,
     created_at: nowIso,

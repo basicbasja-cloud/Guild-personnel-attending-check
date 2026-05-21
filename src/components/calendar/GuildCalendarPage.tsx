@@ -1,16 +1,13 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   format,
   startOfMonth,
-  endOfMonth,
   startOfWeek,
   addDays,
   addMonths,
   subMonths,
-  isSameDay,
   isSameMonth,
   getDay,
-  parseISO,
   isToday,
 } from 'date-fns';
 import {
