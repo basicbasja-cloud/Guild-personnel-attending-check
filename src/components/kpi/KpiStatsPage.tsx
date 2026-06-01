@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { formatISO } from 'date-fns';
-import { getUpcomingSaturday } from '../../lib/week';
+import { getUpcomingSaturday, isDoubleWarWeek } from '../../lib/week';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { KpiAwardsBoard } from './KpiAwardsBoard';
 import { KpiPersonalCard } from './KpiPersonalCard';
@@ -31,10 +31,23 @@ function formatWeekLabel(dateStr: string): string {
 
 export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiStatsPageProps) {
   const [weekStart, setWeekStart]     = useState<string>(defaultWeek);
+  const [warSlot, setWarSlot]         = useState<1 | 2>(1);
   const [search, setSearch]           = useState('');
   const [pickerOpen, setPickerOpen]   = useState(false);
   const [entryTarget, setEntryTarget] = useState<{ id: string; username: string } | null>(null);
   const [boardKey, setBoardKey]       = useState(0);
+
+  const isDouble      = useMemo(() => isDoubleWarWeek(weekStart), [weekStart]);
+  // War 2 is stored as saturday+1 (Sunday slot) to keep the unique DB constraint intact
+  const entryWeekStart = warSlot === 2 ? addDays(weekStart, 1) : weekStart;
+  const warLabel       = isDouble
+    ? `${warSlot === 1 ? 'War 1' : 'War 2'} · ${formatWeekLabel(weekStart)}`
+    : formatWeekLabel(weekStart);
+
+  const handleWeekChange = (next: string) => {
+    setWeekStart(next);
+    setWarSlot(1);
+  };
 
   const { profiles } = useAllProfiles();
 
@@ -97,22 +110,40 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
       <div>
         <h2 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
           📊 Your Metrics
-          <span className="text-slate-500 font-normal">· {formatWeekLabel(weekStart)}</span>
+          <span className="text-slate-500 font-normal">· {warLabel}</span>
         </h2>
 
         <div className="flex items-center gap-2 mb-3">
           <button
-            onClick={() => setWeekStart((w) => addDays(w, -7))}
+            onClick={() => handleWeekChange(addDays(weekStart, -7))}
             className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white text-xs"
           >◀</button>
           <span className="text-slate-400 text-xs">{formatWeekLabel(weekStart)}</span>
           <button
-            onClick={() => setWeekStart((w) => addDays(w, 7))}
+            onClick={() => handleWeekChange(addDays(weekStart, 7))}
             className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white text-xs"
           >▶</button>
+
+          {/* War slot toggle — only on double-war weeks */}
+          {isDouble && (
+            <div className="flex ml-2 rounded-lg overflow-hidden border border-slate-700">
+              <button
+                onClick={() => setWarSlot(1)}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  warSlot === 1 ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >⚔️ War 1</button>
+              <button
+                onClick={() => setWarSlot(2)}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  warSlot === 2 ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >⚔️ War 2</button>
+            </div>
+          )}
         </div>
 
-        <KpiPersonalCard key={boardKey} userId={currentUserId} weekStart={weekStart} />
+        <KpiPersonalCard key={`${boardKey}-${entryWeekStart}`} userId={currentUserId} weekStart={entryWeekStart} />
       </div>
 
       {/* Member picker (officer only) */}
@@ -180,7 +211,8 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
         <KpiEntryModal
           targetUserId={entryTarget.id}
           targetUsername={entryTarget.username}
-          weekStart={weekStart}
+          weekStart={entryWeekStart}
+          warLabel={warLabel}
           isSuperManager={isSuperManager}
           onClose={() => setEntryTarget(null)}
           onSaved={handleSaved}

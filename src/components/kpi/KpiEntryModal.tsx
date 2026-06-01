@@ -9,6 +9,7 @@ interface KpiEntryModalProps {
   targetUserId:   string;
   targetUsername: string;
   weekStart:      string;
+  warLabel?:      string;
   isSuperManager: boolean;
   onClose:        () => void;
   onSaved:        () => void;
@@ -31,6 +32,7 @@ export function KpiEntryModal({
   targetUserId,
   targetUsername,
   weekStart,
+  warLabel,
   isSuperManager,
   onClose,
   onSaved,
@@ -105,7 +107,7 @@ export function KpiEntryModal({
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700 shrink-0">
           <div>
             <h2 className="text-white font-semibold">Enter War Stats</h2>
-            <p className="text-slate-400 text-sm mt-0.5">{targetUsername} · {weekStart}</p>
+            <p className="text-slate-400 text-sm mt-0.5">{targetUsername} · {warLabel ?? weekStart}</p>
           </div>
           <button
             onClick={onClose}

@@ -8,14 +8,13 @@ export function getUpcomingSaturday(date: Date) {
   return addDays(normalizedDate, daysUntilSaturday);
 }
 
-/**
- * Returns the most recent Saturday on or before `date`.
- * Use this as the default 'war week' -- war stats are entered after
- * Saturday's battle, so viewing on Monday should still show last Saturday.
- */
-export function getLastSaturday(date: Date): Date {
-  const d = startOfDay(date);
-  const dayOfWeek = getDay(d);           // 0=Sun ... 6=Sat
-  const daysSince = (dayOfWeek + 1) % 7; // Sat->0, Sun->1, Mon->2 ...
-  return addDays(d, -daysSince);
+// ── Double-war week detection ─────────────────────────────────────────────────
+// May 30 2026 is the reference double-war Saturday (week 0 = double).
+// Pattern alternates: double, single, double, single …
+const DOUBLE_WAR_REF_MS = new Date('2026-05-30T00:00:00').getTime();
+
+export function isDoubleWarWeek(saturdayDateStr: string): boolean {
+  const sat = new Date(saturdayDateStr + 'T00:00:00').getTime();
+  const weeksSinceRef = Math.round((sat - DOUBLE_WAR_REF_MS) / (7 * 24 * 60 * 60 * 1000));
+  return weeksSinceRef % 2 === 0;
 }
