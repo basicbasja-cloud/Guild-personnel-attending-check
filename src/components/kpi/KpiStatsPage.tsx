@@ -181,7 +181,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
           targetUserId={entryTarget.id}
           targetUsername={entryTarget.username}
           weekStart={weekStart}
-          isManager={isManager || isSuperManager}
+          isSuperManager={isSuperManager}
           onClose={() => setEntryTarget(null)}
           onSaved={handleSaved}
         />

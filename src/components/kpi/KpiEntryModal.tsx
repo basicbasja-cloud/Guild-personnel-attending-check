@@ -9,7 +9,7 @@ interface KpiEntryModalProps {
   targetUserId:   string;
   targetUsername: string;
   weekStart:      string;
-  isManager:      boolean;
+  isSuperManager: boolean;
   onClose:        () => void;
   onSaved:        () => void;
   onDeleted?:     () => void;
@@ -31,7 +31,7 @@ export function KpiEntryModal({
   targetUserId,
   targetUsername,
   weekStart,
-  isManager,
+  isSuperManager,
   onClose,
   onSaved,
   onDeleted,
@@ -132,8 +132,8 @@ export function KpiEntryModal({
                     <option key={r.tag} value={r.tag}>{r.label}</option>
                   ))}
                 </select>
-                {/* Show scoring formula — managers/super-managers only */}
-                {isManager && (() => {
+                {/* Show scoring formula — super managers only */}
+                {isSuperManager && (() => {
                   const role = KPI_ROLES.find(r => r.tag === roleTag);
                   return role ? (
                     <div className="mt-2 bg-slate-800/60 border border-slate-700/50 rounded-lg px-3 py-2">
