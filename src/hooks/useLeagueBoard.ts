@@ -1,6 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
+// ─── Meta cache (seasons + plans) ────────────────────────────────────────────
+const META_CACHE_KEY    = 'gwm_league_meta_v1';
+const META_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+interface MetaCache { at: number; seasons: LeagueSeason[]; plans: LeaguePlan[]; }
+let metaMemCache: MetaCache | null = null;
+
+function readMetaLocal(): MetaCache | null {
+  try { const r = localStorage.getItem(META_CACHE_KEY); return r ? JSON.parse(r) as MetaCache : null; } catch { return null; }
+}
+function writeMetaLocal(seasons: LeagueSeason[], plans: LeaguePlan[]) {
+  try { localStorage.setItem(META_CACHE_KEY, JSON.stringify({ at: Date.now(), seasons, plans })); } catch { /**/ }
+}
+
+/** Preload league board seasons + plans. Call on login for instant tab open. */
+export async function preloadLeagueBoard(): Promise<void> {
+  if (metaMemCache && Date.now() - metaMemCache.at < META_CACHE_TTL_MS) return;
+  const local = readMetaLocal();
+  if (local && Date.now() - local.at < META_CACHE_TTL_MS) { metaMemCache = local; return; }
+  try {
+    const [seasonsRes, plansRes] = await Promise.all([
+      supabase.from('league_seasons').select('*').order('created_at', { ascending: false }),
+      supabase.from('league_plans').select('*').order('sort_order'),
+    ]);
+    if (seasonsRes.error || plansRes.error) return;
+    const seasons = (seasonsRes.data ?? []) as LeagueSeason[];
+    const plans   = (plansRes.data   ?? []) as LeaguePlan[];
+    metaMemCache  = { at: Date.now(), seasons, plans };
+    writeMetaLocal(seasons, plans);
+  } catch { /**/ }
+}
+
 // ─── Domain types ────────────────────────────────────────────────────────────
 
 export interface LeagueSeason {
@@ -113,16 +145,20 @@ export type UseLeagueBoardReturn = LeagueBoardState & LeagueBoardActions;
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useLeagueBoard(): UseLeagueBoardReturn {
-  const [state, setState] = useState<LeagueBoardState>({
-    seasons: [],
-    plans: [],
-    assignments: [],
-    arrows: [],
-    drawings: [],
-    historicParties: [],
-    activePlanId: null,
-    loading: true,
-    error: null,
+  const [state, setState] = useState<LeagueBoardState>(() => {
+    // Seed from in-memory or localStorage cache for instant render
+    const meta = metaMemCache ?? (() => { const l = readMetaLocal(); if (l) metaMemCache = l; return l; })();
+    return {
+      seasons:         meta?.seasons ?? [],
+      plans:           meta?.plans   ?? [],
+      assignments:     [],
+      arrows:          [],
+      drawings:        [],
+      historicParties: [],
+      activePlanId:    meta?.plans[0]?.id ?? null,
+      loading:         !meta, // skip spinner if we have cached data
+      error:           null,
+    };
   });
 
   const reloadCounter = useRef(0);
@@ -140,6 +176,10 @@ export function useLeagueBoard(): UseLeagueBoardReturn {
       const seasons = (seasonsRes.data ?? []) as LeagueSeason[];
       const plans = (plansRes.data ?? []) as LeaguePlan[];
       const firstPlanId = plans[0]?.id ?? null;
+
+      // Update meta cache
+      metaMemCache = { at: Date.now(), seasons, plans };
+      writeMetaLocal(seasons, plans);
 
       setState((s) => ({
         ...s,

@@ -11,6 +11,10 @@ import { LeagueBoardPage } from './components/league/LeagueBoardPage';
 import type { PartySummaryWithMembers } from './components/league/LeagueBoardPage';
 import { GuildCalendarPage } from './components/calendar/GuildCalendarPage';
 import { ProfilePage } from './components/profile/ProfilePage';
+import { KpiStatsPage } from './components/kpi/KpiStatsPage';
+import { preloadKpiBoard } from './hooks/useKpiBoard';
+import { preloadLeagueBoard } from './hooks/useLeagueBoard';
+import { preloadKpiProfile } from './hooks/useKpiProfile';
 import { preloadProfiles } from './hooks/useAllProfiles';
 import { preloadAttendance } from './hooks/useAttendance';
 import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
@@ -18,7 +22,7 @@ import { preloadGuildEvents } from './hooks/useGuildEvents';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
-type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league' | 'calendar';
+type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league' | 'calendar' | 'kpi';
 
 function AppContent() {
   const auth = useAuth();
@@ -66,6 +70,9 @@ function AppContent() {
       preloadAttendance().catch(() => {});
       preloadWarSetup().catch(() => {});
       preloadGuildEvents().catch(() => {});
+      preloadKpiBoard().catch(() => {});
+      preloadLeagueBoard().catch(() => {});
+      preloadKpiProfile(auth.user.id).catch(() => {});
     }
   }, [auth.user?.id]);
 
@@ -112,6 +119,7 @@ function AppContent() {
     { id: 'dashboard', label: 'Dashboard', emoji: '📊', mgmtOnly: true },
     { id: 'league', label: 'League Board', emoji: '🗺️' },
     { id: 'calendar', label: 'Guild Event Schedule', emoji: '📅' },
+    { id: 'kpi',   label: 'KPI Stats',  emoji: '🏆' },
     { id: 'admin', label: 'Admin Mode', emoji: '🔐', mgmtOnly: true },
   ];
 
@@ -182,6 +190,13 @@ function AppContent() {
           <div className={tab === 'calendar' ? '' : 'hidden'}>
             <GuildCalendarPage isManagement={auth.profile.is_management} userId={auth.profile.id} />
           </div>
+          {tab === 'kpi' && (
+            <KpiStatsPage
+              currentUserId={auth.profile.id}
+              isSuperManager={auth.profile.is_super_manager ?? false}
+              isManager={auth.profile.is_management ?? false}
+            />
+          )}
         </main>
       </div>
 

@@ -10,6 +10,9 @@ interface EventsCache {
   events: GuildEvent[];
 }
 
+// In-memory layer — avoids localStorage JSON parse on every hook mount
+let memCache: EventsCache | null = null;
+
 function readCache(): EventsCache | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -21,13 +24,16 @@ function readCache(): EventsCache | null {
 }
 
 function writeCache(events: GuildEvent[]) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), events })); } catch { /**/ }
+  const entry: EventsCache = { at: Date.now(), events };
+  memCache = entry;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(entry)); } catch { /**/ }
 }
 
 /** Preload called in App.tsx as soon as the user authenticates */
 export async function preloadGuildEvents() {
+  if (memCache && Date.now() - memCache.at < CACHE_TTL_MS) return;
   const cached = readCache();
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return;
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) { memCache = cached; return; }
   const { data, error } = await supabase
     .from('guild_events')
     .select('*')
@@ -55,7 +61,12 @@ export interface UseGuildEventsReturn {
 }
 
 export function useGuildEvents(): UseGuildEventsReturn {
-  const [events, setEvents] = useState<GuildEvent[]>(() => readCache()?.events ?? []);
+  const [events, setEvents] = useState<GuildEvent[]>(() => {
+    // RAM first, then localStorage
+    const hot = memCache ?? readCache();
+    if (hot) memCache = hot;
+    return hot?.events ?? [];
+  });
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -79,9 +90,9 @@ export function useGuildEvents(): UseGuildEventsReturn {
 
   // Initial load — skip if fresh cache
   useEffect(() => {
-    const cached = readCache();
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-      setEvents(cached.events);
+    const hot = memCache;
+    if (hot && Date.now() - hot.at < CACHE_TTL_MS) {
+      setEvents(hot.events);
       return;
     }
     fetchAll();

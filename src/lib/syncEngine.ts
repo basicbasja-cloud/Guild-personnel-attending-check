@@ -53,6 +53,7 @@ class SyncEngineClass {
     this.queue.set(mut.key, mut);
     this.setStatus('syncing');
     this.notifyPending();
+    this.startTick(); // restart ticker if it was paused
   }
 
   getPendingCount() {
@@ -109,8 +110,17 @@ class SyncEngineClass {
     this.tickTimer = setInterval(() => void this.tick(), TICK_MS);
   }
 
+  private stopTick() {
+    if (this.tickTimer === null) return;
+    clearInterval(this.tickTimer);
+    this.tickTimer = null;
+  }
+
   private async tick() {
-    if (this.queue.size === 0 || this._status === 'offline') return;
+    if (this.queue.size === 0 || this._status === 'offline') {
+      if (this.queue.size === 0) this.stopTick(); // pause when idle
+      return;
+    }
 
     // Snapshot and clear queue — new mutations during async work stay queued
     const batch = [...this.queue.values()];
@@ -158,6 +168,7 @@ class SyncEngineClass {
       }
 
       // If no new mutations arrived during the async work, go back to online
+      if (this.queue.size === 0) this.stopTick(); // nothing left — pause ticker
       this.setStatus(this.queue.size > 0 ? 'syncing' : 'online');
       this.notifyPending();
     } catch (err) {

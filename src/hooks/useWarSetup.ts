@@ -27,22 +27,33 @@ export interface PartyWithMembers {
 const CACHE_PREFIX = 'gwm_war_v1_';
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+// In-memory hot cache — avoids JSON.parse on every mount after first load
+const hotCache = new Map<string, { at: number; data: WarSetupData }>();
+
 function readCache(weekStr: string): { at: number; data: WarSetupData } | null {
+  // Check RAM first
+  const hot = hotCache.get(weekStr);
+  if (hot) return hot;
+  // Fall back to localStorage
   try {
     const raw = localStorage.getItem(CACHE_PREFIX + weekStr);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     // Guard against old cache format with missing/null arrays
     if (!parsed?.data || !Array.isArray(parsed.data.groups) || !Array.isArray(parsed.data.substitutes)) return null;
-    return parsed as { at: number; data: WarSetupData };
+    const entry = parsed as { at: number; data: WarSetupData };
+    hotCache.set(weekStr, entry); // promote to RAM
+    return entry;
   } catch {
     return null;
   }
 }
 
 function writeCache(weekStr: string, data: WarSetupData) {
+  const entry = { at: Date.now(), data };
+  hotCache.set(weekStr, entry); // keep in RAM
   try {
-    localStorage.setItem(CACHE_PREFIX + weekStr, JSON.stringify({ at: Date.now(), data }));
+    localStorage.setItem(CACHE_PREFIX + weekStr, JSON.stringify(entry));
   } catch {
     // Ignore quota errors.
   }

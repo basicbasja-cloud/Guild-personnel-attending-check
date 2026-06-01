@@ -8,9 +8,10 @@ interface AdminModePageProps {
   userId: string;
 }
 
-type RoleOption = 'member' | 'management';
+type RoleOption = 'member' | 'management' | 'super_manager';
 
 function getRole(profile: Profile): RoleOption {
+  if (profile.is_super_manager) return 'super_manager';
   if (profile.is_management) return 'management';
   return 'member';
 }
@@ -298,7 +299,7 @@ export function AdminModePage({ userId }: AdminModePageProps) {
           <div>
             <h2 className="text-white font-bold text-lg">Admin Mode</h2>
             <p className="text-slate-400 text-sm">
-              Manually assign member, management, or admin access.
+              Manually assign member, management, super manager, or admin access.
             </p>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -353,6 +354,7 @@ export function AdminModePage({ userId }: AdminModePageProps) {
                   >
                     <option value="member">Member</option>
                     <option value="management">Management</option>
+                    <option value="super_manager">Super Manager</option>
                   </select>
                   {listedProfile.id !== userId && (
                     <button
