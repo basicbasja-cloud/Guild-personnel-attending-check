@@ -103,8 +103,63 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
         </div>
       </div>
 
+      {/* Global Controls Bar */}
+      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="text-slate-400 text-sm font-medium">Select Week:</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleWeekChange(addDays(weekStart, -7))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-sm"
+            >
+              ◀
+            </button>
+            <span className="text-white text-sm font-semibold px-2 min-w-[120px] text-center">
+              {formatWeekLabel(weekStart)}
+            </span>
+            <button
+              onClick={() => handleWeekChange(addDays(weekStart, 7))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-sm"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+
+        {/* War slot toggle — only on double-war weeks */}
+        <div className="flex items-center gap-3">
+          <span className="text-slate-400 text-sm font-medium">
+            {isDouble ? 'This week has 2 wars:' : 'This week has 1 war:'}
+          </span>
+          {isDouble ? (
+            <div className="flex rounded-lg overflow-hidden border border-slate-700">
+              <button
+                onClick={() => setWarSlot(1)}
+                className={`px-4 py-1.5 text-xs font-semibold transition-colors ${
+                  warSlot === 1 ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                ⚔️ War 1
+              </button>
+              <button
+                onClick={() => setWarSlot(2)}
+                className={`px-4 py-1.5 text-xs font-semibold transition-colors ${
+                  warSlot === 2 ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                ⚔️ War 2
+              </button>
+            </div>
+          ) : (
+            <div className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 text-xs font-medium">
+              ⚔️ Single War
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Awards Board */}
-      <KpiAwardsBoard key={boardKey} isSuperManager={isSuperManager} />
+      <KpiAwardsBoard key={`${boardKey}-${entryWeekStart}`} isSuperManager={isSuperManager} weekStart={entryWeekStart} />
 
       {/* Personal metrics */}
       <div>
@@ -112,36 +167,6 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
           📊 Your Metrics
           <span className="text-slate-500 font-normal">· {warLabel}</span>
         </h2>
-
-        <div className="flex items-center gap-2 mb-3">
-          <button
-            onClick={() => handleWeekChange(addDays(weekStart, -7))}
-            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white text-xs"
-          >◀</button>
-          <span className="text-slate-400 text-xs">{formatWeekLabel(weekStart)}</span>
-          <button
-            onClick={() => handleWeekChange(addDays(weekStart, 7))}
-            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white text-xs"
-          >▶</button>
-
-          {/* War slot toggle — only on double-war weeks */}
-          {isDouble && (
-            <div className="flex ml-2 rounded-lg overflow-hidden border border-slate-700">
-              <button
-                onClick={() => setWarSlot(1)}
-                className={`px-3 py-1 text-xs font-medium transition-colors ${
-                  warSlot === 1 ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >⚔️ War 1</button>
-              <button
-                onClick={() => setWarSlot(2)}
-                className={`px-3 py-1 text-xs font-medium transition-colors ${
-                  warSlot === 2 ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >⚔️ War 2</button>
-            </div>
-          )}
-        </div>
 
         <KpiPersonalCard key={`${boardKey}-${entryWeekStart}`} userId={currentUserId} weekStart={entryWeekStart} />
       </div>

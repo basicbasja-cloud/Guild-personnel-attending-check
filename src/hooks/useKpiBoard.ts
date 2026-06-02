@@ -73,21 +73,16 @@ export function invalidateKpiBoardCache(weekStart: string) {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-function defaultWeek(): string {
-  return formatISO(getUpcomingSaturday(new Date()), { representation: 'date' });
-}
+
 
 interface UseKpiBoardResult {
   rows: KpiBoardRow[];
   loading: boolean;
   error: string | null;
-  weekStart: string;
-  setWeekStart: (d: string) => void;
   refresh: () => void;
 }
 
-export function useKpiBoard(): UseKpiBoardResult {
-  const [weekStart, setWeekStart] = useState<string>(defaultWeek);
+export function useKpiBoard(weekStart: string): UseKpiBoardResult {
   const [rows, setRows]           = useState<KpiBoardRow[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
@@ -137,5 +132,5 @@ export function useKpiBoard(): UseKpiBoardResult {
     return () => { cancelled = true; };
   }, [weekStart, tick]);
 
-  return { rows, loading, error, weekStart, setWeekStart, refresh };
+  return { rows, loading, error, refresh };
 }

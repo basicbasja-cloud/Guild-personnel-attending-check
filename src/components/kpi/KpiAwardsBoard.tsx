@@ -6,6 +6,7 @@ import type { KpiBoardRow, KpiMetricKey, KpiRoleTag } from '../../types';
 
 interface KpiAwardsBoardProps {
   isSuperManager: boolean;
+  weekStart:      string;
 }
 
 // ── Raw entry type (kpi_weekly_entries + profile join) ─────────────────────────
@@ -163,20 +164,10 @@ function BoardCard({
   );
 }
 
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
-}
 
-function formatWeekLabel(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
-}
 
-export function KpiAwardsBoard({ isSuperManager }: KpiAwardsBoardProps) {
-  const { rows, loading, error, weekStart, setWeekStart, refresh } = useKpiBoard();
+export function KpiAwardsBoard({ isSuperManager, weekStart }: KpiAwardsBoardProps) {
+  const { rows, loading, error, refresh } = useKpiBoard(weekStart);
   const hasData = rows.length > 0;
 
   // Super manager: fetch all raw entries for the selected week
@@ -264,21 +255,6 @@ export function KpiAwardsBoard({ isSuperManager }: KpiAwardsBoardProps) {
           🏆 Guild League Awards
         </h2>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setWeekStart(addDays(weekStart, -7))}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-sm"
-          >
-            ◀
-          </button>
-          <span className="text-slate-300 text-sm font-medium px-2 min-w-[120px] text-center">
-            {formatWeekLabel(weekStart)}
-          </span>
-          <button
-            onClick={() => setWeekStart(addDays(weekStart, 7))}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-sm"
-          >
-            ▶
-          </button>
           <button
             onClick={refresh}
             className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-sm"
