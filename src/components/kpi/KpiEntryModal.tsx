@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useKpiEntry } from '../../hooks/useKpiEntry';
 import { invalidateKpiBoardCache } from '../../hooks/useKpiBoard';
 import { invalidateKpiProfileCache } from '../../hooks/useKpiProfile';
+import { invalidateKpiEntriesCache } from './KpiAwardsBoard';
 import { KPI_ROLES, KPI_ROLE_METRICS, EMPTY_KPI_VALUES } from '../../constants/kpi';
 import type { KpiMetricKey, KpiRoleTag, KpiEntryInput } from '../../types';
 
@@ -85,6 +86,7 @@ export function KpiEntryModal({
       // Invalidate caches so the board and profile refresh immediately
       invalidateKpiBoardCache(weekStart);
       invalidateKpiProfileCache(targetUserId);
+      invalidateKpiEntriesCache(weekStart);
       setToast('Stats saved ✓');
       setTimeout(() => { onSaved(); onClose(); }, 800);
     }
@@ -95,6 +97,7 @@ export function KpiEntryModal({
     if (ok) {
       invalidateKpiBoardCache(weekStart);
       invalidateKpiProfileCache(targetUserId);
+      invalidateKpiEntriesCache(weekStart);
       (onDeleted ?? onSaved)();
       onClose();
     }

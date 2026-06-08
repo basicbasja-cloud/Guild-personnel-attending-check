@@ -1,8 +1,39 @@
 import { useMemo, useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useKpiBoard } from '../../hooks/useKpiBoard';
+import { useKpiBoard, invalidateKpiBoardCache } from '../../hooks/useKpiBoard';
 import { KPI_BOARDS, getKpiRoleShortLabel, formatKpiNumber } from '../../constants/kpi';
 import type { KpiBoardRow, KpiMetricKey, KpiRoleTag } from '../../types';
+
+// ── Cache for raw entries (in-memory + localStorage) ──────────────────────────
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+const CACHE_PREFIX = 'gwm_kpi_entries_v4_';
+
+const entriesMemCache = new Map<string, { at: number; entries: KpiAllEntry[] }>();
+
+function readEntriesCache(key: string): { at: number; entries: KpiAllEntry[] } | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.entries)) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function writeEntriesCache(key: string, entries: KpiAllEntry[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), entries }));
+  } catch { /* quota */ }
+}
+
+function entriesCacheKey(weekStart: string) { return `${CACHE_PREFIX}${weekStart}`; }
+
+/** Invalidate entries cache (call after stats are saved) */
+export function invalidateKpiEntriesCache(weekStart: string) {
+  const key = entriesCacheKey(weekStart);
+  entriesMemCache.delete(key);
+  try { localStorage.removeItem(key); } catch { /* noop */ }
+}
 
 interface KpiAwardsBoardProps {
   isSuperManager: boolean;
@@ -42,32 +73,60 @@ const ALL_COLS: { key: SortKey; label: string; title: string; score?: true }[] =
   { key: 'damage_taken',           label: 'Taken',     title: 'Damage Taken' },
   { key: 'resources_gathered',     label: 'Res',       title: 'Resources Gathered' },
   // ── Category scores ───────────────────────────────────────────────────────
-  { key: 'sc_glass_cannon',        label: '🔥 GC',     title: 'Glass Cannon score: DMG×(1+(K+A)×0.02)÷max(1,D)',           score: true },
-  { key: 'sc_game_changer',        label: '🛡️ GM',     title: 'Game Changer score: (Assists×0.1×Taken) + (Kills×1.5)',      score: true },
-  { key: 'sc_gatebreaker',         label: '🏰 GB',     title: 'Gatebreaker score: Siege×(1+K×0.05)',                        score: true },
-  { key: 'sc_logistics_master',    label: '📦 LM',     title: 'Logistics Master score: DMG + Res×2',                        score: true },
-  { key: 'sc_resilient_guardian',  label: '💚 RG',     title: 'Resilient Guardian score: Revives×1000 + Heal÷500',         score: true },
+  { key: 'sc_glass_cannon',        label: '🔥 GC',     title: 'Glass Cannon: DMG×0.35 + Kills×25000 + Assists×3000',        score: true },
+  { key: 'sc_game_changer',        label: '🛡️ GM',     title: 'Game Changer: Taken×0.35 + Assists×200 − Deaths×3K',   score: true },
+  { key: 'sc_gatebreaker',         label: '🏰 GB',     title: 'Gatebreaker: Siege×0.15 + Kills×10000 + Assists×3000',      score: true },
+  { key: 'sc_logistics_master',    label: '📦 LM',     title: 'Logistics Master: Resources×1400 + Taken×0.04 + Assists×2K', score: true },
+  { key: 'sc_resilient_guardian',  label: '💚 RG',     title: 'Resilient Guardian: Healing×0.3 + Revives×60000 + Assists×2K', score: true },
 ];
 
 function computeEntryScores(e: KpiAllEntry) {
-  const d = Math.max(1, e.deaths);
-  // Overall score — role-based formula
-  let sc_overall = 0;
-  switch (e.role_tag) {
-    case 'ROLE_DPS_DMG':  sc_overall = Math.round((e.damage_dealt + e.siege_damage * 1.5 + e.kills * 500) / d); break;
-    case 'ROLE_DPS_DEF':  sc_overall = Math.round((e.damage_dealt + e.kills * 500) / d); break;
-    case 'ROLE_TANK':     sc_overall = Math.round((e.damage_taken + e.assists * 100) / d); break;
-    case 'ROLE_HEALER':   sc_overall = Math.round((e.healing_done + e.ally_revives * 500) / Math.max(1, e.deaths * 0.3)); break;
-    case 'ROLE_RESOURCE': sc_overall = Math.round((e.damage_dealt + e.resources_gathered * 2.0) / d); break;
-    default:              sc_overall = 0;
+  // ── v4.0 Dynamic Role Classification ──
+  let effectiveRole = e.role_tag;
+  if (effectiveRole === 'ROLE_DPS_DEF') effectiveRole = 'ROLE_DPS_DMG';
+  if (effectiveRole === 'ROLE_DPS_DMG') {
+    if (e.kills > 10 && e.siege_damage < (e.damage_dealt * 0.15)) {
+      effectiveRole = 'ROLE_DPS_ASSASSIN';
+    } else if (e.siege_damage > (e.damage_dealt * 1.5) && e.siege_damage > 500000) {
+      effectiveRole = 'ROLE_DPS_SIEGE';
+    }
   }
+
+  // ── v4.0 Additive Score Formulas ──
+  let sc_overall = 0;
+  switch (effectiveRole) {
+    case 'ROLE_DPS_DMG':
+      sc_overall = Math.round((e.damage_dealt * 0.4) + (e.siege_damage * 0.2) + (e.kills * 20000) + (e.assists * 5000) - (e.deaths * 8000));
+      break;
+    case 'ROLE_DPS_ASSASSIN': {
+      const takedowns = e.kills + (0.4 * e.assists);
+      const deathPenalty = (takedowns >= e.deaths * 2) ? 0 : e.deaths * 3000;
+      sc_overall = Math.round((e.damage_dealt * 0.55) + (e.kills * 30000) + (e.assists * 4000) - deathPenalty);
+      break;
+    }
+    case 'ROLE_DPS_SIEGE':
+      sc_overall = Math.round((e.siege_damage * 0.20) + (e.damage_dealt * 0.30) + (e.kills * 30000) + (e.assists * 10000) - (e.deaths * 8000));
+      break;
+    case 'ROLE_TANK':
+      sc_overall = Math.round((e.damage_taken * 0.15) + (e.assists * 15000) + (e.damage_dealt * 0.25) - (e.deaths * 5000));
+      break;
+    case 'ROLE_HEALER':
+      sc_overall = Math.round((e.healing_done * 0.35) + (e.assists * 6000) + (e.ally_revives * 50000) - (e.deaths * 6000));
+      break;
+    case 'ROLE_RESOURCE':
+      sc_overall = Math.round((e.resources_gathered * 600) + (e.damage_taken * 0.20) + (e.assists * 15000) - (e.deaths * 15000));
+      break;
+    default:
+      sc_overall = 0;
+  }
+
   return {
-    sc_overall,
-    sc_glass_cannon:       Math.round((e.damage_dealt * (1 + (e.kills + e.assists) * 0.02)) / d),
-    sc_game_changer:       Math.round(e.assists * 0.1 * e.damage_taken + e.kills * 1.5),
-    sc_gatebreaker:        Math.round(e.siege_damage * (1 + e.kills * 0.05)),
-    sc_logistics_master:   Math.round(e.damage_dealt + e.resources_gathered * 2),
-    sc_resilient_guardian: Math.round(e.ally_revives * 1000 + e.healing_done / 500),
+    sc_overall: Math.max(0, sc_overall),
+    sc_glass_cannon:       Math.round(e.damage_dealt * 0.35 + e.kills * 25000 + e.assists * 3000),
+    sc_game_changer:       Math.round(e.damage_taken * 0.35 + e.assists * 200 - e.deaths * 3000),
+    sc_gatebreaker:        Math.round(e.siege_damage * 0.15 + e.kills * 10000 + e.assists * 3000),
+    sc_logistics_master:   Math.round(e.resources_gathered * 1400 + e.damage_taken * 0.04 + e.assists * 2000),
+    sc_resilient_guardian: Math.round(e.healing_done * 0.3 + e.ally_revives * 60000 + e.assists * 2000),
   };
 }
 
@@ -78,11 +137,12 @@ const MEDAL = [
 ];
 
 const ROLE_PILL_CLASS: Record<string, string> = {
-  ROLE_DPS_DMG:  'bg-red-950/60 text-red-300 border-red-800/40',
-  ROLE_DPS_DEF:  'bg-orange-950/60 text-orange-300 border-orange-800/40',
-  ROLE_TANK:     'bg-blue-950/60 text-blue-300 border-blue-800/40',
-  ROLE_HEALER:   'bg-green-950/60 text-green-300 border-green-800/40',
-  ROLE_RESOURCE: 'bg-teal-950/60 text-teal-300 border-teal-800/40',
+  ROLE_DPS_DMG:      'bg-red-950/60 text-red-300 border-red-800/40',
+  ROLE_DPS_ASSASSIN: 'bg-purple-950/60 text-purple-300 border-purple-800/40',
+  ROLE_DPS_SIEGE:    'bg-amber-950/60 text-amber-300 border-amber-800/40',
+  ROLE_TANK:         'bg-blue-950/60 text-blue-300 border-blue-800/40',
+  ROLE_HEALER:       'bg-green-950/60 text-green-300 border-green-800/40',
+  ROLE_RESOURCE:     'bg-teal-950/60 text-teal-300 border-teal-800/40',
 };
 
 function RolePill({ roleTag }: { roleTag: KpiRoleTag }) {
@@ -178,45 +238,61 @@ export function KpiAwardsBoard({ isSuperManager, weekStart }: KpiAwardsBoardProp
 
   useEffect(() => {
     if (!isSuperManager) return;
+
+    const key = entriesCacheKey(weekStart);
+
+    // Check in-memory cache first
+    const mem = entriesMemCache.get(key);
+    if (mem && Date.now() - mem.at < CACHE_TTL_MS) {
+      setAllEntries(mem.entries);
+      return;
+    }
+
+    // Check localStorage cache
+    const local = readEntriesCache(key);
+    if (local && Date.now() - local.at < CACHE_TTL_MS) {
+      entriesMemCache.set(key, local);
+      setAllEntries(local.entries);
+      return;
+    }
+
     setAllEntriesLoading(true);
 
-    // Two-step fetch: entries first, then profiles — avoids FK-join issues
+    // Single RPC call: entries + profiles joined server-side, one network round-trip
     supabase
-      .from('kpi_weekly_entries')
-      .select('id, user_id, role_tag, damage_dealt, siege_damage, damage_taken, kills, deaths, assists, healing_done, ally_revives, resources_gathered')
-      .eq('week_start', weekStart)
-      .then(async ({ data: entries, error: entriesErr }) => {
-        if (entriesErr) {
-          console.error('[KpiAwardsBoard] entries fetch error:', entriesErr);
+      .rpc('get_kpi_entries_with_profiles', { target_week_start: weekStart })
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('[KpiAwardsBoard] fetch error:', error);
           setAllEntries([]);
           setAllEntriesLoading(false);
           return;
         }
-        const rawEntries = (entries ?? []) as Omit<KpiAllEntry, 'profile'>[];
-        if (rawEntries.length === 0) {
-          setAllEntries([]);
-          setAllEntriesLoading(false);
-          return;
-        }
-
-        // Fetch matching profiles in a second query
-        const userIds = [...new Set(rawEntries.map(e => e.user_id))];
-        const { data: profiles, error: profilesErr } = await supabase
-          .from('profiles')
-          .select('id, username, character_name, character_class, is_test_account')
-          .in('id', userIds);
-
-        if (profilesErr) {
-          console.error('[KpiAwardsBoard] profiles fetch error:', profilesErr);
-        }
-
-        const profileMap = new Map(
-          (profiles ?? []).map(p => [p.id, p as KpiAllEntry['profile']])
-        );
-        const merged: KpiAllEntry[] = rawEntries.map(e => ({
-          ...e,
-          profile: profileMap.get(e.user_id) ?? null,
+        const rows = (data ?? []) as {
+          id: string; user_id: string; role_tag: string;
+          damage_dealt: number; siege_damage: number; damage_taken: number;
+          kills: number; deaths: number; assists: number;
+          healing_done: number; ally_revives: number; resources_gathered: number;
+          username: string; character_name: string | null;
+          character_class: string | null; is_test_account: boolean;
+        }[];
+        const merged: KpiAllEntry[] = rows.map(r => ({
+          id: r.id, user_id: r.user_id, role_tag: r.role_tag as KpiRoleTag,
+          damage_dealt: r.damage_dealt, siege_damage: r.siege_damage, damage_taken: r.damage_taken,
+          kills: r.kills, deaths: r.deaths, assists: r.assists,
+          healing_done: r.healing_done, ally_revives: r.ally_revives, resources_gathered: r.resources_gathered,
+          profile: {
+            username: r.username,
+            character_name: r.character_name,
+            character_class: r.character_class,
+            is_test_account: r.is_test_account,
+          },
         }));
+
+        // Cache the result
+        entriesMemCache.set(key, { at: Date.now(), entries: merged });
+        writeEntriesCache(key, merged);
+
         setAllEntries(merged);
         setAllEntriesLoading(false);
       });

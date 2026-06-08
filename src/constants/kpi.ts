@@ -1,7 +1,16 @@
 import type { KpiMetricKey, KpiRoleTag } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KPI CONSTANTS  v2.2  —  Sword of Justice Guild League
+// KPI CONSTANTS  v4.0  —  Sword of Justice Guild League  (Patch 1.2.3 Meta)
+//
+// v4.0 FULL REWORK: additive formulas with role-specific weights.
+// No division by deaths — instead, explicit death-penalty subtraction.
+//
+// DYNAMIC CLASSIFICATION:
+//   ROLE_DPS_ASSASSIN ← DPS_DMG when kills>10 & siege<dmg×0.15
+//   ROLE_DPS_SIEGE    ← DPS_DMG when siege>dmg×1.5
+//
+// ROLES: DPS_DMG · DPS_ASSASSIN · DPS_SIEGE · TANK · HEALER · RESOURCE
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Roles ─────────────────────────────────────────────────────────────────────
@@ -17,36 +26,43 @@ export const KPI_ROLES: {
     tag: 'ROLE_DPS_DMG',
     label: 'DPS Damage',
     shortLabel: 'DPS DMG',
-    scoringFormula: '(damage + siege×1.5 + kills×500) / MAX(1, deaths)',
-    description: 'Push lanes, burst enemies, destroy towers and flags.',
+    scoringFormula: 'dmg×0.4 + siege×0.2 + kills×20000 + assists×5000 - deaths×8000',
+    description: 'Standard backline/ranged DPS — continuous safe damage, kills, tower chipping.',
   },
   {
-    tag: 'ROLE_DPS_DEF',
-    label: 'DPS Defense',
-    shortLabel: 'DPS DEF',
-    scoringFormula: '(damage + kills×500) / MAX(1, deaths)',
-    description: 'Hold lanes, eliminate enemy pushers, protect the flag.',
+    tag: 'ROLE_DPS_ASSASSIN',
+    label: 'Assassin',
+    shortLabel: 'Assassin',
+    scoringFormula: 'dmg×0.55 + kills×30000 + assists×4000 - DP  (DP=0 if Takedowns≥deaths×2 else DP=deaths×3000)',
+    description: 'Glass-cannon dive class — disrupt enemy backlines, trade kills. Death penalty waived when KDA≥2:1.',
+  },
+  {
+    tag: 'ROLE_DPS_SIEGE',
+    label: 'Siege Specialist',
+    shortLabel: 'Siege',
+    scoringFormula: 'siege×0.20 + dmg×0.30 + kills×30000 + assists×10000 - deaths×8000',
+    description: 'Objective/tower pusher — destroy structures. Death penalty rewards smart positioning.',
   },
   {
     tag: 'ROLE_TANK',
     label: 'Tank',
     shortLabel: 'Tank',
-    scoringFormula: '(damage_taken + assists×100) / MAX(1, deaths)',
-    description: 'Absorb damage, zone enemies, anchor every team fight.',
+    scoringFormula: 'taken×0.15 + assists×15000 + dmg×0.25 - deaths×5000',
+    description: 'Frontline juggernaut — absorb damage, zone enemies, anchor every team fight.',
   },
   {
     tag: 'ROLE_HEALER',
     label: 'Healer',
     shortLabel: 'Healer',
-    scoringFormula: '(healing + revives×500) / MAX(1, deaths×0.3)',
-    description: 'Sustain allies, revive fallen teammates, stay alive.',
+    scoringFormula: 'healing×0.35 + assists×6000 + revives×50000 - deaths×6000',
+    description: 'Backline sustain support — heal allies, revive fallen teammates, stay alive.',
   },
   {
     tag: 'ROLE_RESOURCE',
     label: 'Resource',
     shortLabel: 'Resource',
-    scoringFormula: '(damage + resources×2.0) / MAX(1, deaths)',
-    description: 'Supply jungle resources that power Guild Leader skills.',
+    scoringFormula: 'resources×600 + taken×0.20 + assists×15000 - deaths×15000',
+    description: 'Dedicated logistics — gather map objectives and materials. High death penalty to encourage survival.',
   },
 ];
 
@@ -106,11 +122,12 @@ export const KPI_METRICS: Record<
 // ── Role → visible metrics (Personal Dashboard) ───────────────────────────────
 
 export const KPI_ROLE_METRICS: Record<KpiRoleTag, KpiMetricKey[]> = {
-  ROLE_DPS_DMG:  ['damage_dealt', 'siege_damage', 'kills',            'deaths'],
-  ROLE_DPS_DEF:  ['damage_dealt', 'kills',         'assists',          'deaths'],
-  ROLE_TANK:     ['damage_taken', 'assists',                           'deaths'],
-  ROLE_HEALER:   ['healing_done', 'ally_revives',                      'deaths'],
-  ROLE_RESOURCE: ['resources_gathered', 'damage_dealt',                'deaths'],
+  ROLE_DPS_DMG:      ['damage_dealt', 'siege_damage', 'kills',         'assists', 'deaths'],
+  ROLE_DPS_ASSASSIN: ['kills',         'assists',      'damage_dealt',           'deaths'],
+  ROLE_DPS_SIEGE:    ['siege_damage', 'damage_dealt',  'kills',         'assists'],
+  ROLE_TANK:         ['damage_taken', 'assists',       'damage_dealt',           'deaths'],
+  ROLE_HEALER:       ['healing_done', 'ally_revives',  'assists',               'deaths'],
+  ROLE_RESOURCE:     ['resources_gathered', 'damage_taken', 'assists',           'deaths'],
 };
 
 // ── Empty values for form initialisation ─────────────────────────────────────
@@ -145,8 +162,8 @@ export const KPI_BOARDS: KpiBoardMeta[] = [
     name:        'board_glass_cannon',
     emoji:       '🔥',
     label:       'Glass Cannon',
-    subtitle:    'Highest damage efficiency per life',
-    formula:     'damage × (1 + kill_participation) / MAX(1, deaths)',
+    subtitle:    'Highest raw damage + kill output',
+    formula:     'dmg×0.35 + kills×25000 + assists×3000',
     colorClass:  [
       'bg-gradient-to-br from-red-950/70 to-orange-950/70',
       'border border-red-500/40',
@@ -160,7 +177,7 @@ export const KPI_BOARDS: KpiBoardMeta[] = [
     emoji:       '🛡️',
     label:       'Game Changer',
     subtitle:    'Most impactful team-fight presence',
-    formula:     'assists × kills',
+    formula:     'taken×0.35 + assists×200 − deaths×3000',
     colorClass:  [
       'bg-gradient-to-br from-blue-950/70 to-indigo-950/70',
       'border border-blue-500/40',
@@ -174,7 +191,7 @@ export const KPI_BOARDS: KpiBoardMeta[] = [
     emoji:       '🏰',
     label:       'Gatebreaker',
     subtitle:    'Highest structure destruction output',
-    formula:     'siege_damage × (1 + kills/team_kills × 0.3)',
+    formula:     'siege×0.15 + kills×10000 + assists×3000',
     colorClass:  [
       'bg-gradient-to-br from-amber-950/70 to-yellow-950/70',
       'border border-amber-500/40',
@@ -187,8 +204,8 @@ export const KPI_BOARDS: KpiBoardMeta[] = [
     name:        'board_logistics_master',
     emoji:       '📦',
     label:       'Logistics Master',
-    subtitle:    'Resource supply & battlefield survival',
-    formula:     'damage_dealt + resources_gathered × 2.0',
+    subtitle:    'Resource supply & survival',
+    formula:     'resources×1400 + taken×0.04 + assists×2000',
     colorClass:  [
       'bg-gradient-to-br from-emerald-950/70 to-teal-950/70',
       'border border-emerald-500/40',
@@ -202,7 +219,7 @@ export const KPI_BOARDS: KpiBoardMeta[] = [
     emoji:       '💚',
     label:       'Resilient Guardian',
     subtitle:    'Crucial revives & sustained healing',
-    formula:     'ally_revives × 1000 + healing_done / 500',
+    formula:     'healing×0.3 + revives×60000 + assists×2000',
     colorClass:  [
       'bg-gradient-to-br from-rose-950/70 to-pink-950/70',
       'border border-rose-500/40',
@@ -282,27 +299,37 @@ export const PROGRESSIVE_MESSAGES: ProgressiveMessages = {
     damage_dealt: { strong_up: '🔥 ดาเมจพุ่ง +{X}% คมขึ้นชัดเจน!', up: '📈 ดาเมจดีขึ้น +{X}%', stable: '🎯 ดาเมจทรงตัว (Stable)', calibrating: '⚔️ กำลังปรับจังหวะโจมตี', reset: '⚙️ ปรับระบบโจมตีใหม่' },
     siege_damage: { strong_up: '🏰 ทุบป้อมแรงขึ้น +{X}%!', up: '📈 Siege ดีขึ้น +{X}%', stable: '🎯 Siege ทรงตัว (Stable)', calibrating: '🏰 สัปดาห์นี้ focus Player Fight', reset: '⚙️ ปรับแนว Siege ใหม่' },
     kills:        { strong_up: '💥 Kill เพิ่มขึ้น +{X}%!', up: '📈 Kill ดีขึ้น +{X}%', stable: '🎯 Kill ทรงตัว (Stable)', calibrating: '💥 กำลังหาจังหวะ Finish', reset: '⚙️ ปรับ Positioning ใหม่' },
+    assists:      { strong_up: '🤝 Assist เพิ่มขึ้น +{X}%!', up: '📈 Assist ดีขึ้น +{X}%', stable: '🎯 Assist ทรงตัว', calibrating: '🤝 กำลังหาจังหวะ Team Play', reset: '⚙️ ปรับ Teamfight ใหม่' },
     deaths:       { strong_up: '🛡️ ตายน้อยลง +{X}% ยอดเยี่ยม!', up: '📈 อยู่รอดดีขึ้น +{X}%', stable: '🎯 Survival ทรงตัว', calibrating: '🔄 ฝึกจับจังหวะถอย', reset: '⚙️ ปรับ Positioning ใหม่' },
   },
-  ROLE_DPS_DEF: {
-    damage_dealt: { strong_up: '🔥 ดาเมจสกัดแรงขึ้น +{X}%!', up: '📈 ดาเมจป้องกันดีขึ้น +{X}%', stable: '🎯 ดาเมจทรงตัว (Stable)', calibrating: '⚔️ กำลังปรับจังหวะสกัด', reset: '⚙️ ปรับระบบป้องกันใหม่' },
-    kills:        { strong_up: '💥 สกัดศัตรูเพิ่มขึ้น +{X}%!', up: '📈 Kill ป้องกันดีขึ้น +{X}%', stable: '🎯 Kill ทรงตัว (Stable)', calibrating: '💥 กำลังหาจังหวะ Peel', reset: '⚙️ ปรับแนวป้องกันใหม่' },
-    assists:      { strong_up: '🤝 ช่วยทีมได้มากขึ้น +{X}%!', up: '📈 Assist ดีขึ้น +{X}%', stable: '🎯 Assist ทรงตัว (Stable)', calibrating: '🤝 กำลังหาตำแหน่ง Support', reset: '⚙️ ปรับ Teamplay ใหม่' },
-    deaths:       { strong_up: '🛡️ ตายน้อยลง +{X}% — กำแพงเหล็ก!', up: '📈 อยู่รอดดีขึ้น +{X}%', stable: '🎯 Survival ทรงตัว', calibrating: '🔄 ฝึกอ่านเกมเพื่อถอยทัน', reset: '⚙️ ปรับ Positioning ใหม่' },
+  ROLE_DPS_ASSASSIN: {
+    kills:        { strong_up: '💀 สังหารศัตรูเพิ่มขึ้น +{X}% — นักล่าไร้ปรานี!', up: '📈 Kill ดีขึ้น +{X}%', stable: '🎯 Kill ทรงตัว', calibrating: '🗡️ กำลังหาจุด Dive ที่ดี', reset: '⚙️ ปรับเส้นทางลอบสังหารใหม่' },
+    assists:      { strong_up: '🤝 ร่วมสังหารเพิ่ม +{X}% — ทีมเวิร์คระดับเทพ!', up: '📈 Assist ดีขึ้น +{X}%', stable: '🎯 Assist ทรงตัว', calibrating: '🤝 กำลังปรับจังหวะเข้าไฟต์', reset: '⚙️ ปรับ Team Dive ใหม่' },
+    damage_dealt: { strong_up: '⚡ Burst Damage เพิ่ม +{X}%!', up: '📈 ดาเมจดีขึ้น +{X}%', stable: '🎯 ดาเมจทรงตัว', calibrating: '⚡ กำลังฝึก Combo', reset: '⚙️ ปรับ Skill Rotation ใหม่' },
+    deaths:       { strong_up: '🛡️ KDA ดีขึ้น — คุ้มกับการแลก!', up: '📈 อัตราแลกดีขึ้น +{X}%', stable: '🎯 Trade-off สมดุล', calibrating: '🔄 ฝึกอ่านจังหวะเข้า-ออก', reset: '⚙️ ปรับเส้นทาง Escape ใหม่' },
+  },
+  ROLE_DPS_SIEGE: {
+    siege_damage: { strong_up: '🏰 ทลายป้อมปราการเพิ่มขึ้น +{X}% — เครื่องจักรทำลาย!', up: '📈 Siege ดีขึ้น +{X}%', stable: '🎯 Siege ทรงตัว', calibrating: '🏰 กำลังหาเส้นทางทำลายป้อม', reset: '⚙️ ปรับเส้นทาง Siege ใหม่' },
+    damage_dealt: { strong_up: '⚔️ ป้องกันตัวดีขึ้น +{X}%!', up: '📈 ดาเมจดีขึ้น +{X}%', stable: '🎯 ดาเมจทรงตัว', calibrating: '⚔️ กำลังฝึกป้องกันตัวระหว่าง Siege', reset: '⚙️ ปรับ Self-Defense ใหม่' },
+    kills:        { strong_up: '💥 เก็บ Kill ระหว่าง Siege เพิ่ม +{X}%!', up: '📈 Kill ดีขึ้น +{X}%', stable: '🎯 Kill ทรงตัว', calibrating: '💥 กำลังปรับ Timing', reset: '⚙️ ปรับ Kill Securing ใหม่' },
+    assists:      { strong_up: '🤝 ช่วยทีมระหว่าง Siege เพิ่ม +{X}%!', up: '📈 Assist ดีขึ้น +{X}%', stable: '🎯 Assist ทรงตัว', calibrating: '🤝 กำลังฝึก Team Push', reset: '⚙️ ปรับ Push Timing ใหม่' },
   },
   ROLE_TANK: {
     damage_taken: { strong_up: '💪 ดูดดาเมจให้ทีมได้มากขึ้น +{X}%!', up: '📈 Tanking ดีขึ้น +{X}%', stable: '🎯 Tanking ทรงตัว (Stable)', calibrating: '💪 สัปดาห์นี้ไฟต์น้อยกว่าปกติ', reset: '⚙️ ปรับแนว Frontline ใหม่' },
     assists:      { strong_up: '🤝 อยู่ร่วมทุกไฟต์ +{X}%!', up: '📈 Assist ดีขึ้น +{X}%', stable: '🎯 Assist ทรงตัว (Stable)', calibrating: '🤝 กำลังหาตำแหน่ง Frontline', reset: '⚙️ ปรับ Zone Control ใหม่' },
+    damage_dealt: { strong_up: '⚔️ ดาเมจตอบโต้ดีขึ้น +{X}%!', up: '📈 ดาเมจดีขึ้น +{X}%', stable: '🎯 ดาเมจทรงตัว', calibrating: '⚔️ กำลังฝึก Combo หน้าไฟต์', reset: '⚙️ ปรับ Damage Rotation ใหม่' },
     deaths:       { strong_up: '🛡️ ยืนได้นานขึ้น +{X}% — แท็งก์จริง!', up: '📈 อยู่รอดดีขึ้น +{X}%', stable: '🎯 Survival ทรงตัว', calibrating: '🔄 ฝึกอ่าน Focus Target', reset: '⚙️ ปรับ Positioning ใหม่' },
   },
   ROLE_HEALER: {
     healing_done:  { strong_up: '💚 รักษาได้มากขึ้น +{X}% ทีมรอดเพราะคุณ!', up: '📈 Healing ดีขึ้น +{X}%', stable: '🎯 Healing ทรงตัว (Stable)', calibrating: '💚 กำลังปรับ Priority การรักษา', reset: '⚙️ ปรับ Heal Rotation ใหม่' },
     ally_revives:  { strong_up: '✨ ปลุกเพื่อนได้มากขึ้น +{X}% — หน่วยกู้ชีพ!', up: '📈 Revive ดีขึ้น +{X}%', stable: '🎯 ทีมรอดโดยไม่ต้องปลุกมาก', calibrating: '✨ สัปดาห์นี้ทีมรอดดีขึ้น ก็ดี!', reset: '⚙️ ปรับ Revive Timing ใหม่' },
+    assists:       { strong_up: '🤝 ร่วมไฟต์มากขึ้น +{X}% — Healer สายบู๊!', up: '📈 Assist ดีขึ้น +{X}%', stable: '🎯 Assist ทรงตัว', calibrating: '🤝 กำลังฝึก Positioning', reset: '⚙️ ปรับ Follow-up ใหม่' },
     deaths:        { strong_up: '🛡️ ตายน้อยลง +{X}% — Healer ยืนได้นาน!', up: '📈 อยู่รอดดีขึ้น +{X}%', stable: '🎯 Survival ทรงตัว', calibrating: '🔄 ฝึกตำแหน่งให้ปลอดภัยขึ้น', reset: '⚙️ ปรับ Positioning ใหม่' },
   },
   ROLE_RESOURCE: {
     resources_gathered: { strong_up: '📦 เก็บทรัพยากรได้มากขึ้น +{X}% — เส้นเลือดทีม!', up: '📈 Resource ดีขึ้น +{X}%', stable: '🎯 Resource ทรงตัว (Stable)', calibrating: '📦 กำลังปรับเส้นทางเก็บใหม่', reset: '⚙️ ปรับ Route ใหม่' },
-    damage_dealt:       { strong_up: '🔥 ดาเมจป้องกันตัวสูงขึ้น +{X}%!', up: '📈 ดาเมจดีขึ้น +{X}%', stable: '🎯 ดาเมจทรงตัว (Stable)', calibrating: '⚔️ กำลังปรับรับมือศัตรูระหว่างเก็บ', reset: '⚙️ ปรับ Survival Route ใหม่' },
+    damage_taken:       { strong_up: '💪 อึดขึ้น รับดาเมจระหว่างเก็บได้มากขึ้น +{X}%!', up: '📈 ความอึดดีขึ้น +{X}%', stable: '🎯 ความอึดทรงตัว', calibrating: '💪 กำลังปรับ Survival Route', reset: '⚙️ ปรับเส้นทางหลบหลีกใหม่' },
+    assists:            { strong_up: '🤝 ช่วยทีมระหว่างเก็บของมากขึ้น +{X}%!', up: '📈 Assist ดีขึ้น +{X}%', stable: '🎯 Assist ทรงตัว', calibrating: '🤝 กำลังปรับ Rotate', reset: '⚙️ ปรับ Support Timing ใหม่' },
     deaths:             { strong_up: '🛡️ อยู่รอดได้นานขึ้น +{X}% เก็บต่อเนื่อง!', up: '📈 อยู่รอดดีขึ้น +{X}%', stable: '🎯 Survival ทรงตัว', calibrating: '🔄 ฝึกอ่านเกมเพื่อเอาตัวรอด', reset: '⚙️ ปรับเส้นทางหลบหลีกใหม่' },
   },
 };
@@ -337,4 +364,79 @@ export function getProgressiveMessage(
       ?.[roleTag]?.[metricKey]?.[state];
   if (!template) return '';
   return template.replace('{X}', label ?? '');
+}
+
+// ── Dynamic Role Classification (Patch 1.2.3 Meta) ──────────────────────────
+
+/**
+ * Classify a player into the correct role based on their playstyle metrics.
+ * DPS_DMG players may be reclassified as ASSASSIN or SIEGE dynamically.
+ * Legacy ROLE_DPS_DEF is mapped to ROLE_DPS_DMG.
+ */
+export function classifyRole(
+  originalRole: KpiRoleTag | string,
+  damageDealt: number,
+  siegeDamage: number,
+  kills: number,
+): KpiRoleTag {
+  // Legacy mapping
+  if (originalRole === 'ROLE_DPS_DEF') return 'ROLE_DPS_DMG';
+  // Only DPS_DMG can be dynamically reclassified
+  if (originalRole !== 'ROLE_DPS_DMG') return originalRole as KpiRoleTag;
+  // Assassin: high kills (>10) AND low siege relative to damage
+  if (kills > 10 && siegeDamage < (damageDealt * 0.15)) {
+    return 'ROLE_DPS_ASSASSIN';
+  }
+  // Siege: siege dominates over player damage AND siege is meaningful (>500k)
+  if (siegeDamage > (damageDealt * 1.5) && siegeDamage > 500000) {
+    return 'ROLE_DPS_SIEGE';
+  }
+  return 'ROLE_DPS_DMG';
+}
+
+/**
+ * Compute the raw_score for a player using the Patch 1.2.3 additive formulas.
+ * All scores are floored to 0 (no negative scores).
+ */
+export function computeKpiScore(
+  roleTag: KpiRoleTag,
+  damageDealt: number,
+  siegeDamage: number,
+  damageTaken: number,
+  kills: number,
+  deaths: number,
+  assists: number,
+  healingDone: number,
+  allyRevives: number,
+  resourcesGathered: number,
+): number {
+  const d = damageDealt, s = siegeDamage, dt = damageTaken;
+  const k = kills, de = deaths, a = assists;
+  const h = healingDone, r = allyRevives, res = resourcesGathered;
+
+  switch (roleTag) {
+    case 'ROLE_DPS_DMG':
+      return Math.max(0, Math.floor((d * 0.4) + (s * 0.2) + (k * 20000) + (a * 5000) - (de * 8000)));
+
+    case 'ROLE_DPS_ASSASSIN': {
+      const takedowns = k + (0.4 * a);
+      const deathPenalty = (takedowns >= de * 2) ? 0 : de * 3000;
+      return Math.max(0, Math.floor((d * 0.55) + (k * 30000) + (a * 4000) - deathPenalty));
+    }
+
+    case 'ROLE_DPS_SIEGE':
+      return Math.max(0, Math.floor((s * 0.20) + (d * 0.30) + (k * 30000) + (a * 10000) - (de * 8000)));
+
+    case 'ROLE_TANK':
+      return Math.max(0, Math.floor((dt * 0.15) + (a * 15000) + (d * 0.25) - (de * 5000)));
+
+    case 'ROLE_HEALER':
+      return Math.max(0, Math.floor((h * 0.35) + (a * 6000) + (r * 50000) - (de * 6000)));
+
+    case 'ROLE_RESOURCE':
+      return Math.max(0, Math.floor((res * 600) + (dt * 0.20) + (a * 15000) - (de * 15000)));
+
+    default:
+      return 0;
+  }
 }

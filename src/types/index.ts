@@ -117,7 +117,8 @@ export interface GuildEvent {
 
 export type KpiRoleTag =
   | 'ROLE_DPS_DMG'
-  | 'ROLE_DPS_DEF'
+  | 'ROLE_DPS_ASSASSIN'
+  | 'ROLE_DPS_SIEGE'
   | 'ROLE_TANK'
   | 'ROLE_HEALER'
   | 'ROLE_RESOURCE';
