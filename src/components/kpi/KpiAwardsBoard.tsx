@@ -74,7 +74,7 @@ const ALL_COLS: { key: SortKey; label: string; title: string; score?: true }[] =
   { key: 'resources_gathered',     label: 'Res',       title: 'Resources Gathered' },
   // ── Category scores ───────────────────────────────────────────────────────
   { key: 'sc_glass_cannon',        label: '🔥 GC',     title: 'Glass Cannon: DMG×0.35 + Kills×25000 + Assists×3000',        score: true },
-  { key: 'sc_game_changer',        label: '🛡️ GM',     title: 'Game Changer: Taken×0.35 + Assists×200 − Deaths×3K',   score: true },
+  { key: 'sc_game_changer', label: '🛡️ GM', title: 'Game Changer [TANK ONLY]: Taken×0.35 + Assists×200 − Deaths×3K', score: true },
   { key: 'sc_gatebreaker',         label: '🏰 GB',     title: 'Gatebreaker: Siege×0.15 + Kills×10000 + Assists×3000',      score: true },
   { key: 'sc_logistics_master',    label: '📦 LM',     title: 'Logistics Master: Resources×1400 + Taken×0.04 + Assists×2K', score: true },
   { key: 'sc_resilient_guardian',  label: '💚 RG',     title: 'Resilient Guardian: Healing×0.3 + Revives×60000 + Assists×2K', score: true },
@@ -122,7 +122,7 @@ function computeEntryScores(e: KpiAllEntry) {
   return {
     sc_overall: Math.max(0, sc_overall),
     sc_glass_cannon:       Math.round(e.damage_dealt * 0.35 + e.kills * 25000 + e.assists * 3000),
-    sc_game_changer:       Math.round(e.damage_taken * 0.35 + e.assists * 200 - e.deaths * 3000),
+    sc_game_changer:       effectiveRole === 'ROLE_TANK' ? Math.round(e.damage_taken * 0.35 + e.assists * 200 - e.deaths * 3000) : 0,
     sc_gatebreaker:        Math.round(e.siege_damage * 0.15 + e.kills * 10000 + e.assists * 3000),
     sc_logistics_master:   Math.round(e.resources_gathered * 1400 + e.damage_taken * 0.04 + e.assists * 2000),
     sc_resilient_guardian: Math.round(e.healing_done * 0.3 + e.ally_revives * 60000 + e.assists * 2000),
