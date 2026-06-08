@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useKpiBoard, invalidateKpiBoardCache } from '../../hooks/useKpiBoard';
+import { useKpiBoard } from '../../hooks/useKpiBoard';
 import { KPI_BOARDS, getKpiRoleShortLabel, formatKpiNumber } from '../../constants/kpi';
 import type { KpiBoardRow, KpiMetricKey, KpiRoleTag } from '../../types';
 
@@ -83,7 +83,6 @@ const ALL_COLS: { key: SortKey; label: string; title: string; score?: true }[] =
 function computeEntryScores(e: KpiAllEntry) {
   // ── v4.0 Dynamic Role Classification ──
   let effectiveRole = e.role_tag;
-  if (effectiveRole === 'ROLE_DPS_DEF') effectiveRole = 'ROLE_DPS_DMG';
   if (effectiveRole === 'ROLE_DPS_DMG') {
     if (e.kills > 10 && e.siege_damage < (e.damage_dealt * 0.15)) {
       effectiveRole = 'ROLE_DPS_ASSASSIN';

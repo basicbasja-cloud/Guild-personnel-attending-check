@@ -371,7 +371,7 @@ export function getProgressiveMessage(
 /**
  * Classify a player into the correct role based on their playstyle metrics.
  * DPS_DMG players may be reclassified as ASSASSIN or SIEGE dynamically.
- * Legacy ROLE_DPS_DEF is mapped to ROLE_DPS_DMG.
+ * Legacy ROLE_DPS_DEF string is mapped to ROLE_DPS_DMG.
  */
 export function classifyRole(
   originalRole: KpiRoleTag | string,
@@ -380,7 +380,7 @@ export function classifyRole(
   kills: number,
 ): KpiRoleTag {
   // Legacy mapping
-  if (originalRole === 'ROLE_DPS_DEF') return 'ROLE_DPS_DMG';
+  if (originalRole === 'ROLE_DPS_DEF' as string) return 'ROLE_DPS_DMG';
   // Only DPS_DMG can be dynamically reclassified
   if (originalRole !== 'ROLE_DPS_DMG') return originalRole as KpiRoleTag;
   // Assassin: high kills (>10) AND low siege relative to damage
