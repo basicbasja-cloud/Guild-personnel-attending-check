@@ -176,7 +176,7 @@ export const KPI_BOARDS: KpiBoardMeta[] = [
     name:        'board_game_changer',
     emoji:       '🛡️',
     label:       'Game Changer',
-    subtitle:    'Most impactful team-fight presence',
+    subtitle:    'Tank front-line impact [TANK ONLY]',
     formula:     'taken×0.35 + assists×200 − deaths×3000',
     colorClass:  [
       'bg-gradient-to-br from-blue-950/70 to-indigo-950/70',
