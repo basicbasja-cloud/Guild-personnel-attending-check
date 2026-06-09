@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { formatISO } from 'date-fns';
 import { getUpcomingSaturday, isDoubleWarWeek } from '../../lib/week';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
@@ -6,6 +6,9 @@ import { KpiAwardsBoard } from './KpiAwardsBoard';
 import { KpiPersonalCard } from './KpiPersonalCard';
 import { KpiEntryModal } from './KpiEntryModal';
 import { invalidateKpiProfileCache } from '../../hooks/useKpiProfile';
+import { downloadKpiTemplate, parseKpiExcel } from '../../lib/kpiExcel';
+import type { ParsedKpiRow } from '../../lib/kpiExcel';
+import { useKpiBulkImport } from '../../hooks/useKpiBulkImport';
 
 interface KpiStatsPageProps {
   currentUserId:  string;
@@ -36,6 +39,11 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
   const [pickerOpen, setPickerOpen]   = useState(false);
   const [entryTarget, setEntryTarget] = useState<{ id: string; username: string } | null>(null);
   const [boardKey, setBoardKey]       = useState(0);
+  const [importOpen, setImportOpen]   = useState(false);
+  const [parsedRows, setParsedRows]   = useState<ParsedKpiRow[] | null>(null);
+  const [importFileName, setImportFileName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { importing, results, bulkImport, reset: resetImport } = useKpiBulkImport();
 
   const isDouble      = useMemo(() => isDoubleWarWeek(weekStart), [weekStart]);
   // War 2 is stored as saturday+1 (Sunday slot) to keep the unique DB constraint intact
@@ -100,6 +108,29 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
               + Enter Stats
             </button>
           )}
+
+          {/* Super manager: Excel tools */}
+          {isSuperManager && (
+            <>
+              <button
+                onClick={() => downloadKpiTemplate(profiles)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                📥 Template
+              </button>
+              <button
+                onClick={() => {
+                  resetImport();
+                  setParsedRows(null);
+                  setImportFileName('');
+                  setImportOpen(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-cyan-700 hover:bg-cyan-600 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                📤 Import Excel
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -159,7 +190,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
       </div>
 
       {/* Awards Board */}
-      <KpiAwardsBoard key={`${boardKey}-${entryWeekStart}`} isSuperManager={isSuperManager} weekStart={entryWeekStart} />
+      <KpiAwardsBoard key={`${boardKey}-${entryWeekStart}`} isSuperManager={isSuperManager} weekStart={entryWeekStart} currentUserId={currentUserId} />
 
       {/* Personal metrics */}
       <div>
@@ -242,6 +273,206 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
           onClose={() => setEntryTarget(null)}
           onSaved={handleSaved}
         />
+      )}
+
+      {/* Hidden file input for Excel import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          setImportFileName(file.name);
+          const rows = await parseKpiExcel(file);
+          setParsedRows(rows);
+          // Reset the input so the same file can be re-selected
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }}
+      />
+
+      {/* Import Preview Modal */}
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[85vh]">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700 shrink-0">
+              <div>
+                <h2 className="text-white font-semibold">📤 Import KPI from Excel</h2>
+                <p className="text-slate-400 text-sm mt-0.5">
+                  {importFileName
+                    ? `File: ${importFileName} · ${parsedRows ? parsedRows.length : 0} rows found`
+                    : 'Select an Excel file to import'}
+                </p>
+              </div>
+              <button
+                onClick={() => { setImportOpen(false); setParsedRows(null); resetImport(); }}
+                className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 transition-colors"
+              >✕</button>
+            </div>
+
+            {/* Body */}
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+              {/* File selector (when no file loaded yet) */}
+              {!parsedRows && (
+                <div className="border-2 border-dashed border-slate-700 rounded-2xl p-10 text-center">
+                  <p className="text-4xl mb-3">📄</p>
+                  <p className="text-slate-300 font-medium mb-2">Upload an Excel file</p>
+                  <p className="text-slate-500 text-sm mb-4">
+                    Download the template first to see the required format
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Choose File
+                    </button>
+                    <button
+                      onClick={() => downloadKpiTemplate(profiles)}
+                      className="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      📥 Download Template
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Parsed rows preview */}
+              {parsedRows && parsedRows.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-slate-400">No data rows found in the file.</p>
+                </div>
+              )}
+
+              {parsedRows && parsedRows.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-400 mb-2">
+                    Preview ({parsedRows.length} rows) — rows with <span className="text-red-400">errors</span> will be skipped
+                  </p>
+                  <div className="overflow-x-auto border border-slate-700 rounded-xl">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-slate-800 text-slate-400">
+                          <th className="px-2 py-1.5 text-left">#</th>
+                          <th className="px-2 py-1.5 text-left">Character</th>
+                          <th className="px-2 py-1.5 text-left">Role</th>
+                          <th className="px-2 py-1.5 text-right">DMG</th>
+                          <th className="px-2 py-1.5 text-right">Siege</th>
+                          <th className="px-2 py-1.5 text-right">Taken</th>
+                          <th className="px-2 py-1.5 text-right">K</th>
+                          <th className="px-2 py-1.5 text-right">D</th>
+                          <th className="px-2 py-1.5 text-right">A</th>
+                          <th className="px-2 py-1.5 text-right">Heal</th>
+                          <th className="px-2 py-1.5 text-right">Rev</th>
+                          <th className="px-2 py-1.5 text-right">Res</th>
+                          <th className="px-2 py-1.5 text-left">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {parsedRows.map((row) => {
+                          const hasErrors = row.errors.length > 0;
+                          return (
+                            <tr key={row.rowNumber} className={hasErrors ? 'bg-red-950/20' : 'hover:bg-slate-800/40'}>
+                              <td className="px-2 py-1.5 text-slate-500">{row.rowNumber}</td>
+                              <td className={`px-2 py-1.5 font-medium ${hasErrors ? 'text-red-400' : 'text-white'}`}>
+                                {row.characterName || <span className="text-red-400">—missing—</span>}
+                              </td>
+                              <td className="px-2 py-1.5 text-slate-300">{row.roleTag || '—'}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.damage_dealt.toLocaleString()}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.siege_damage.toLocaleString()}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.damage_taken.toLocaleString()}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.kills}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.deaths}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.assists}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.healing_done.toLocaleString()}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.ally_revives}</td>
+                              <td className="px-2 py-1.5 text-right text-slate-300 font-mono">{row.resources_gathered.toLocaleString()}</td>
+                              <td className="px-2 py-1.5">
+                                {hasErrors ? (
+                                  <span className="text-red-400 text-[10px]" title={row.errors.join(' | ')}>
+                                    ⚠ Error
+                                  </span>
+                                ) : (
+                                  <span className="text-emerald-400 text-[10px]">✓ OK</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Import results */}
+              {results && (
+                <div className={`rounded-xl px-4 py-3 text-sm ${
+                  results.errors.length === 0
+                    ? 'bg-emerald-950/40 border border-emerald-800/50 text-emerald-300'
+                    : results.success > 0
+                      ? 'bg-amber-950/40 border border-amber-800/50 text-amber-300'
+                      : 'bg-red-950/40 border border-red-800/50 text-red-300'
+                }`}>
+                  <p className="font-semibold">
+                    ✅ {results.success} imported
+                    {results.skipped > 0 && ` · ⏭ ${results.skipped} skipped`}
+                    {results.errors.length > 0 && ` · ⚠ ${results.errors.length} errors`}
+                  </p>
+                  {results.errors.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs text-slate-400 max-h-32 overflow-y-auto">
+                      {results.errors.map((e, i) => (
+                        <li key={i}>Row {e.row}: <span className="text-red-400">{e.message}</span></li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-slate-700 shrink-0">
+              <p className="text-xs text-slate-500">
+                {results
+                  ? 'Import complete'
+                  : parsedRows
+                    ? `Importing for week starting ${formatWeekLabel(entryWeekStart)}`
+                    : ''}
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setImportOpen(false); setParsedRows(null); resetImport(); }}
+                  className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+                >
+                  {results ? 'Close' : 'Cancel'}
+                </button>
+                {parsedRows && !results && (
+                  <button
+                    onClick={async () => {
+                      await bulkImport(parsedRows, entryWeekStart, profiles);
+                      setBoardKey((k) => k + 1);
+                    }}
+                    disabled={importing || parsedRows.length === 0}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    {importing ? 'Importing…' : `Confirm Import (${parsedRows.filter(r => r.errors.length === 0).length} valid)`}
+                  </button>
+                )}
+                {results && (
+                  <button
+                    onClick={() => { setImportOpen(false); setParsedRows(null); resetImport(); }}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Done
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

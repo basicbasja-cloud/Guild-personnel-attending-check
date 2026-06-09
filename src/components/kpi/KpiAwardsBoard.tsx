@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useKpiBoard } from '../../hooks/useKpiBoard';
 import { KPI_BOARDS, getKpiRoleShortLabel, formatKpiNumber } from '../../constants/kpi';
+import { downloadCsv } from '../../lib/exportCsv';
 import type { KpiBoardRow, KpiMetricKey, KpiRoleTag } from '../../types';
 
 // ── Cache for raw entries (in-memory + localStorage) ──────────────────────────
@@ -38,6 +39,7 @@ export function invalidateKpiEntriesCache(weekStart: string) {
 interface KpiAwardsBoardProps {
   isSuperManager: boolean;
   weekStart:      string;
+  currentUserId?: string;
 }
 
 // ── Raw entry type (kpi_weekly_entries + profile join) ─────────────────────────
@@ -157,10 +159,12 @@ function BoardCard({
   boardName,
   allRows,
   isSuperManager,
+  currentUserId,
 }: {
   boardName:      string;
   allRows:        KpiBoardRow[];
   isSuperManager: boolean;
+  currentUserId?: string;
 }) {
   const meta = KPI_BOARDS.find((b) => b.name === boardName);
   const rows = useMemo(
@@ -188,16 +192,22 @@ function BoardCard({
         ) : (
           rows.map((row) => {
             const medal = MEDAL[(row.rank_no ?? 1) - 1] ?? MEDAL[2];
+            const isYou = currentUserId && row.user_id === currentUserId;
             return (
               <div
                 key={`${row.board_name}-${row.user_id}`}
-                className={`flex items-center gap-3 px-3 py-2 rounded-xl border ${medal.bg} ${medal.border}`}
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl border ${medal.bg} ${medal.border} ${isYou ? 'ring-1 ring-indigo-500/50' : ''}`}
               >
                 <span className="text-lg w-6 shrink-0 text-center">{medal.label}</span>
 
                 <div className="flex-1 min-w-0">
                   <p className={`font-semibold text-sm truncate ${medal.text}`}>
                     {row.character_name || row.username}
+                    {isYou && (
+                      <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded bg-indigo-600/60 text-indigo-200 border border-indigo-500/40 font-medium align-middle">
+                        You
+                      </span>
+                    )}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <RolePill roleTag={row.role_tag} />
@@ -218,6 +228,26 @@ function BoardCard({
             );
           })
         )}
+        {/* ── Your rank outside top 3 ──────────────────────────────── */}
+        {currentUserId && (() => {
+          const userBoardRows = allRows.filter((r) => r.board_name === boardName);
+          const myRow = userBoardRows.find((r) => r.user_id === currentUserId);
+          if (!myRow || rows.some((r) => r.user_id === currentUserId)) return null; // already in top 3 or not found
+          return (
+            <div className="flex items-center gap-2 px-3 py-1.5 mt-1 rounded-lg bg-slate-800/40 border border-dashed border-slate-700/60">
+              <span className="text-xs text-slate-400">You're #{myRow.rank_no}</span>
+              {myRow.visible_score != null && isSuperManager && (
+                <span className="text-[10px] text-slate-500 font-mono">{formatKpiNumber(myRow.visible_score)}</span>
+              )}
+              {(() => {
+                const above = userBoardRows.find((r) => (r.rank_no ?? 0) === (myRow.rank_no ?? 1) - 1);
+                if (!above || above.visible_score == null || myRow.visible_score == null) return null;
+                const gap = above.visible_score - myRow.visible_score;
+                return <span className="text-[10px] text-slate-500 ml-auto">{formatKpiNumber(gap)} pts behind 🥉</span>;
+              })()}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -225,7 +255,7 @@ function BoardCard({
 
 
 
-export function KpiAwardsBoard({ isSuperManager, weekStart }: KpiAwardsBoardProps) {
+export function KpiAwardsBoard({ isSuperManager, weekStart, currentUserId }: KpiAwardsBoardProps) {
   const { rows, loading, error, refresh } = useKpiBoard(weekStart);
   const hasData = rows.length > 0;
 
@@ -370,6 +400,7 @@ export function KpiAwardsBoard({ isSuperManager, weekStart }: KpiAwardsBoardProp
               boardName={b.name}
               allRows={rows}
               isSuperManager={isSuperManager}
+              currentUserId={currentUserId}
             />
           ))}
         </div>
@@ -378,10 +409,45 @@ export function KpiAwardsBoard({ isSuperManager, weekStart }: KpiAwardsBoardProp
       {/* ── Super-manager: all raw scores ─────────────────────────────────── */}
       {isSuperManager && (
         <div className="mt-6">
-          <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-            📋 All Member Scores
-            <span className="text-slate-500 font-normal text-xs">· {allEntries.filter(e => !e.profile?.is_test_account).length} entries</span>
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+              📋 All Member Scores
+              <span className="text-slate-500 font-normal text-xs">· {allEntries.filter(e => !e.profile?.is_test_account).length} entries</span>
+            </h3>
+            {sortedEntries.length > 0 && (
+              <button
+                onClick={() => {
+                  const csvRows = sortedEntries.map(entry => {
+                    const sc = computeEntryScores(entry);
+                    return {
+                      character_name: entry.profile?.character_name || '',
+                      username: entry.profile?.username || '',
+                      role_tag: entry.role_tag,
+                      damage_dealt: entry.damage_dealt,
+                      siege_damage: entry.siege_damage,
+                      damage_taken: entry.damage_taken,
+                      kills: entry.kills,
+                      deaths: entry.deaths,
+                      assists: entry.assists,
+                      healing_done: entry.healing_done,
+                      ally_revives: entry.ally_revives,
+                      resources_gathered: entry.resources_gathered,
+                      sc_overall: sc.sc_overall,
+                      sc_glass_cannon: sc.sc_glass_cannon,
+                      sc_game_changer: sc.sc_game_changer,
+                      sc_gatebreaker: sc.sc_gatebreaker,
+                      sc_logistics_master: sc.sc_logistics_master,
+                      sc_resilient_guardian: sc.sc_resilient_guardian,
+                    };
+                  });
+                  downloadCsv(csvRows, `kpi-scores-${weekStart}.csv`);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-slate-700 transition-colors"
+              >
+                📥 Export CSV
+              </button>
+            )}
+          </div>
           {allEntriesLoading ? (
             <div className="h-24 bg-slate-900 border border-slate-700 rounded-2xl animate-pulse" />
           ) : allEntries.length === 0 ? (
