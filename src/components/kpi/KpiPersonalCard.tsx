@@ -6,7 +6,6 @@ import {
   getKpiRoleLabel,
   formatKpiNumber,
   computeKpiScore,
-  KPI_ROLES,
 } from '../../constants/kpi';
 import type { KpiProfileRow, KpiProgressiveState, KpiMetricKey } from '../../types';
 

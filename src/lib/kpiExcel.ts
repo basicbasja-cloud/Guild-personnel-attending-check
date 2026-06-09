@@ -217,7 +217,8 @@ export async function parseKpiExcel(file: File): Promise<ParsedKpiRow[]> {
         if (isNaN(val) || val < 0) {
           errors.push(`Row ${rowNumber}: Invalid value for "${key}"`);
         } else {
-          (parsed as Record<string, unknown>)[key] = val;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (parsed as any)[key] = val;
         }
       }
     }
@@ -257,7 +258,7 @@ function buildHeaderMap(sheet: XLSX.WorkSheet): Map<string, string> {
 }
 
 function findNumericColumnKey(
-  row: Record<string, unknown>,
+  _row: Record<string, unknown>,
   headerMap: Map<string, string>,
   normalizedLabel: string,
 ): string | null {
