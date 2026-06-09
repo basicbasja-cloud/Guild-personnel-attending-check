@@ -100,7 +100,7 @@ function computeEntryScores(e: KpiAllEntry) {
     case 'ROLE_DPS_ASSASSIN': {
       const takedowns = e.kills + (0.4 * e.assists);
       const deathPenalty = (takedowns >= e.deaths * 2) ? 0 : e.deaths * 3000;
-      sc_overall = Math.round((e.damage_dealt * 0.55) + (e.kills * 30000) + (e.assists * 4000) - deathPenalty);
+      sc_overall = Math.round((e.damage_dealt * 0.55) + (e.kills * 50000) + (e.assists * 4000) - deathPenalty);
       break;
     }
     case 'ROLE_DPS_SIEGE':
@@ -113,7 +113,7 @@ function computeEntryScores(e: KpiAllEntry) {
       sc_overall = Math.round((e.healing_done * 0.35) + (e.assists * 6000) + (e.ally_revives * 50000) - (e.deaths * 6000));
       break;
     case 'ROLE_RESOURCE':
-      sc_overall = Math.round((e.resources_gathered * 600) + (e.damage_taken * 0.20) + (e.assists * 15000) - (e.deaths * 15000));
+      sc_overall = Math.round((e.resources_gathered * 1000) + (e.damage_taken * 0.20) + (e.assists * 15000) - (e.deaths * 15000));
       break;
     default:
       sc_overall = 0;

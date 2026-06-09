@@ -33,7 +33,7 @@ export const KPI_ROLES: {
     tag: 'ROLE_DPS_ASSASSIN',
     label: 'Assassin',
     shortLabel: 'Assassin',
-    scoringFormula: 'dmg×0.55 + kills×30000 + assists×4000 - DP  (DP=0 if Takedowns≥deaths×2 else DP=deaths×3000)',
+    scoringFormula: 'dmg×0.55 + kills×50000 + assists×4000 - DP  (DP=0 if Takedowns≥deaths×2 else DP=deaths×3000)',
     description: 'Glass-cannon dive class — disrupt enemy backlines, trade kills. Death penalty waived when KDA≥2:1.',
   },
   {
@@ -61,7 +61,7 @@ export const KPI_ROLES: {
     tag: 'ROLE_RESOURCE',
     label: 'Resource',
     shortLabel: 'Resource',
-    scoringFormula: 'resources×600 + taken×0.20 + assists×15000 - deaths×15000',
+    scoringFormula: 'resources×1000 + taken×0.20 + assists×15000 - deaths×15000',
     description: 'Dedicated logistics — gather map objectives and materials. High death penalty to encourage survival.',
   },
 ];
@@ -421,7 +421,7 @@ export function computeKpiScore(
     case 'ROLE_DPS_ASSASSIN': {
       const takedowns = k + (0.4 * a);
       const deathPenalty = (takedowns >= de * 2) ? 0 : de * 3000;
-      return Math.max(0, Math.floor((d * 0.55) + (k * 30000) + (a * 4000) - deathPenalty));
+      return Math.max(0, Math.floor((d * 0.55) + (k * 50000) + (a * 4000) - deathPenalty));
     }
 
     case 'ROLE_DPS_SIEGE':
@@ -434,7 +434,7 @@ export function computeKpiScore(
       return Math.max(0, Math.floor((h * 0.35) + (a * 6000) + (r * 50000) - (de * 6000)));
 
     case 'ROLE_RESOURCE':
-      return Math.max(0, Math.floor((res * 600) + (dt * 0.20) + (a * 15000) - (de * 15000)));
+      return Math.max(0, Math.floor((res * 1000) + (dt * 0.20) + (a * 15000) - (de * 15000)));
 
     default:
       return 0;
