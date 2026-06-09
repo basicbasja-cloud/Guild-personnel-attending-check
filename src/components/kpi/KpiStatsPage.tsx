@@ -209,7 +209,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
           <span className="text-slate-500 font-normal">· {warLabel}</span>
         </h2>
 
-        <KpiPersonalCard key={`${boardKey}-${entryWeekStart}`} userId={currentUserId} weekStart={entryWeekStart} />
+        <KpiPersonalCard key={`${boardKey}-${entryWeekStart}`} userId={currentUserId} weekStart={entryWeekStart} isSuperManager={isSuperManager} />
       </div>
 
       {/* Member picker (officer only) */}

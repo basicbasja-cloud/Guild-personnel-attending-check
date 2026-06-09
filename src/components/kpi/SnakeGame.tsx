@@ -242,9 +242,7 @@ export function SnakeGame({ userId, username }: SnakeGameProps) {
         case 'ArrowLeft': case 'a': case 'A': newDir = 'LEFT'; break;
         case 'ArrowRight': case 'd': case 'D': newDir = 'RIGHT'; break;
       }
-      if (newDir && newDir !== opposite[dirRef.current]) {
-        nextDirRef.current = newDir;
-      }
+      if (newDir) changeDirection(newDir);
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
@@ -283,6 +281,17 @@ export function SnakeGame({ userId, username }: SnakeGameProps) {
     if (myBest) setHighScore(myBest.score);
   }, [leaderboard, username]);
 
+  // ── Direction helper (shared by keyboard, swipe, and D-pad) ──────────
+  const changeDirection = useCallback((newDir: Direction) => {
+    if (gameState !== 'playing') return;
+    const opposite: Record<Direction, Direction> = {
+      UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT',
+    };
+    if (newDir !== opposite[dirRef.current]) {
+      nextDirRef.current = newDir;
+    }
+  }, [gameState]);
+
   // ── Touch controls ─────────────────────────────────────────────────────
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -295,18 +304,17 @@ export function SnakeGame({ userId, username }: SnakeGameProps) {
     touchStart.current = null;
     const absDx = Math.abs(dx), absDy = Math.abs(dy);
     if (absDx < 10 && absDy < 10) return;
-    const opposite: Record<Direction, Direction> = {
-      UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT',
-    };
-    let newDir: Direction;
-    if (absDx > absDy) {
-      newDir = dx > 0 ? 'RIGHT' : 'LEFT';
-    } else {
-      newDir = dy > 0 ? 'DOWN' : 'UP';
-    }
-    if (newDir !== opposite[dirRef.current]) {
-      nextDirRef.current = newDir;
-    }
+    const newDir: Direction = absDx > absDy
+      ? (dx > 0 ? 'RIGHT' : 'LEFT')
+      : (dy > 0 ? 'DOWN' : 'UP');
+    changeDirection(newDir);
+  };
+
+  // ── D-pad button handler ───────────────────────────────────────────────
+  const padDir = (dir: Direction) => (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    changeDirection(dir);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -379,7 +387,46 @@ export function SnakeGame({ userId, username }: SnakeGameProps) {
 
       {/* Controls hint */}
       {gameState === 'playing' && (
-        <p className="text-slate-500 text-xs">Arrow keys / WASD to move · swipe on mobile</p>
+        <p className="text-slate-500 text-xs">Arrow keys / WASD · D-pad below · swipe on canvas</p>
+      )}
+
+      {/* ── D-pad ──────────────────────────────────────────────────────── */}
+      {gameState === 'playing' && (
+        <div className="flex flex-col items-center gap-1 select-none">
+          <button
+            onMouseDown={padDir('UP')}
+            onTouchStart={padDir('UP')}
+            className="w-14 h-14 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 border border-slate-600 active:border-indigo-500 text-white text-2xl transition-colors touch-none"
+          >
+            ▲
+          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onMouseDown={padDir('LEFT')}
+              onTouchStart={padDir('LEFT')}
+              className="w-14 h-14 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 border border-slate-600 active:border-indigo-500 text-white text-2xl transition-colors touch-none"
+            >
+              ◀
+            </button>
+            <div className="w-14 h-14 flex items-center justify-center rounded-xl bg-slate-900/60 border border-slate-700/50 text-slate-600 text-xs">
+              🐍
+            </div>
+            <button
+              onMouseDown={padDir('RIGHT')}
+              onTouchStart={padDir('RIGHT')}
+              className="w-14 h-14 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 border border-slate-600 active:border-indigo-500 text-white text-2xl transition-colors touch-none"
+            >
+              ▶
+            </button>
+          </div>
+          <button
+            onMouseDown={padDir('DOWN')}
+            onTouchStart={padDir('DOWN')}
+            className="w-14 h-14 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-indigo-600 border border-slate-600 active:border-indigo-500 text-white text-2xl transition-colors touch-none"
+          >
+            ▼
+          </button>
+        </div>
       )}
 
       {/* Leaderboard */}
