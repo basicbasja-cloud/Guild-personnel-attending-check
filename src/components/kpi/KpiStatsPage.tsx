@@ -507,7 +507,6 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
               <SnakeGame
                 userId={currentUserId}
                 username={profiles.find(p => p.id === currentUserId)?.character_name || profiles.find(p => p.id === currentUserId)?.username || 'Player'}
-                onClose={() => setSnakeOpen(false)}
               />
             </div>
           </div>

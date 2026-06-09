@@ -23,10 +23,9 @@ interface LeaderboardEntry {
 interface SnakeGameProps {
   userId: string;
   username: string;
-  onClose: () => void;
 }
 
-export function SnakeGame({ userId, username, onClose }: SnakeGameProps) {
+export function SnakeGame({ userId, username }: SnakeGameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'over'>('idle');
   const [score, setScore] = useState(0);
