@@ -978,3 +978,33 @@ create policy "league_arrows_select_auth"
   on public.league_arrows for select
   using ((select auth.role()) = 'authenticated');
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 9. MINI GAME SCORES
+--    Leaderboard storage for mini-games (snake, etc.)
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.mini_game_scores (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  username   text not null,
+  score      integer not null check (score >= 0),
+  game_type  text not null check (game_type in ('snake')) default 'snake',
+  created_at timestamptz not null default now()
+);
+
+alter table public.mini_game_scores enable row level security;
+
+drop policy if exists "mini_game_scores_select_all" on public.mini_game_scores;
+create policy "mini_game_scores_select_all"
+  on public.mini_game_scores for select
+  using ((select auth.role()) = 'authenticated');
+
+drop policy if exists "mini_game_scores_insert_self" on public.mini_game_scores;
+create policy "mini_game_scores_insert_self"
+  on public.mini_game_scores for insert
+  with check (
+    (select auth.uid()) = user_id
+  );
+
+create index if not exists idx_mini_game_scores_leaderboard
+  on public.mini_game_scores (game_type, score desc, created_at desc);
+
