@@ -1,8 +1,7 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import { useKpiMetrics, metricTrendDisplay, metricTrendDisplayDeaths } from '../../hooks/useKpiMetrics';
 import { useKpiProfile } from '../../hooks/useKpiProfile';
 import { getKpiRoleLabel, formatKpiNumber, computeKpiScore } from '../../constants/kpi';
-import type { KpiMetricKey } from '../../types';
 
 // ─── Personal Card ───────────────────────────────────────────────────────────
 
@@ -19,7 +18,6 @@ export function KpiPersonalCard({ userId, weekStart, isSuperManager }: KpiPerson
     error: metricsError,
     metrics,
     currentEntry,
-    previousEntry,
   } = useKpiMetrics(userId, weekStart);
 
   // ── Overall score profile (for super manager score banner) ───────────

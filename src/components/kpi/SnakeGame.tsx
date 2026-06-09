@@ -232,9 +232,6 @@ export function SnakeGame({ userId, username }: SnakeGameProps) {
         if (e.key === 'Enter' || e.key === ' ') startGame();
         return;
       }
-      const opposite: Record<Direction, Direction> = {
-        UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT',
-      };
       let newDir: Direction | null = null;
       switch (e.key) {
         case 'ArrowUp': case 'w': case 'W': newDir = 'UP'; break;
