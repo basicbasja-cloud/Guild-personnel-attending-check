@@ -11,7 +11,11 @@ const COLORS = [
 const SHOW_DELAY = 600;
 const START_LENGTH = 3;
 
-export function SequenceMemory() {
+interface SequenceMemoryProps {
+  onScore?: (score: number) => void;
+}
+
+export function SequenceMemory({ onScore }: SequenceMemoryProps) {
   const [phase, setPhase] = useState<'idle' | 'showing' | 'input' | 'over'>('idle');
   const [sequence, setSequence] = useState<number[]>([]);
   const [inputIdx, setInputIdx] = useState(0);
@@ -54,6 +58,7 @@ export function SequenceMemory() {
     if (colorIdx !== sequence[inputIdx]) {
       // Wrong!
       const final = score;
+      onScore?.(final);
       const { best } = recordScore(GAME_KEY, final);
       setHighScore(best);
       setPhase('over');

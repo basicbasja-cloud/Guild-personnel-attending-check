@@ -13,7 +13,11 @@ interface Target {
   size: number;
 }
 
-export function AimTrainer() {
+interface AimTrainerProps {
+  onScore?: (score: number) => void;
+}
+
+export function AimTrainer({ onScore }: AimTrainerProps) {
   const [phase, setPhase] = useState<'idle' | 'playing' | 'over'>('idle');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => getBestScore(GAME_KEY));
@@ -57,6 +61,7 @@ export function AimTrainer() {
           clearInterval(timerRef.current);
           clearInterval(spawnRef.current);
           const final = scoreRef.current;
+          onScore?.(final);
           const { best } = recordScore(GAME_KEY, final);
           setHighScore(best);
           setPhase('over');

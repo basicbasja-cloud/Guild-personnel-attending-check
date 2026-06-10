@@ -2,7 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 type Phase = 'waiting' | 'ready' | 'too_soon' | 'go' | 'result';
 
-export function ReactionTest() {
+interface ReactionTestProps {
+  onScore?: (score: number) => void;
+}
+
+export function ReactionTest({ onScore }: ReactionTestProps) {
   const [phase, setPhase] = useState<Phase>('waiting');
   const [score, setScore] = useState<number | null>(null);
   const [best, setBest] = useState<number>(() => {
@@ -34,6 +38,9 @@ export function ReactionTest() {
       const ms = Math.round(performance.now() - startRef.current);
       setScore(ms);
       setAttempts((a) => a + 1);
+      // Lower is better → convert to score where higher = faster
+      const scoreVal = Math.max(1, Math.round(1000 / ms * 10));
+      onScore?.(scoreVal);
       if (best === 0 || ms < best) {
         setBest(ms);
         try { localStorage.setItem('gwm_reaction_best', String(ms)); } catch { /* noop */ }

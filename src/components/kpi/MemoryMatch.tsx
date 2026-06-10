@@ -21,7 +21,11 @@ function initCards(): Card[] {
   return deck.map((emoji, i) => ({ id: i, emoji, flipped: false, matched: false }));
 }
 
-export function MemoryMatch() {
+interface MemoryMatchProps {
+  onScore?: (score: number) => void;
+}
+
+export function MemoryMatch({ onScore }: MemoryMatchProps) {
   const [cards, setCards] = useState<Card[]>(initCards);
   const [flipped, setFlipped] = useState<number[]>([]);
   const [locked, setLocked] = useState(false);
@@ -58,7 +62,13 @@ export function MemoryMatch() {
       setLocked(false);
       setMatches((m) => {
         const next = m + 1;
-        if (next >= PAIRS) setGameWon(true);
+        if (next >= PAIRS) {
+          setGameWon(true);
+          // Score = max(0, 100 - moves * 5 + elapsed * 2)
+          const timeBonus = Math.max(0, 60 - elapsed) * 2;
+          const final = Math.max(10, 100 - moves * 5 + timeBonus);
+          onScore?.(Math.round(final));
+        }
         return next;
       });
     } else {

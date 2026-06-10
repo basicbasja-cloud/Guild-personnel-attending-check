@@ -11,7 +11,11 @@ const BALL_SPEED_INIT = 3;
 const SPEED_INCREASE = 0.3;
 const WIN_SCORE = 5;
 
-export function PongGame() {
+interface PongGameProps {
+  onScore?: (score: number) => void;
+}
+
+export function PongGame({ onScore }: PongGameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState<'idle' | 'playing' | 'over'>('idle');
   const [score, setScore] = useState(0);
@@ -70,6 +74,7 @@ export function PongGame() {
     if (ball.x < 0) {
       // Player missed
       const final = scoreRef.current;
+      onScore?.(final);
       const { best } = recordScore(GAME_KEY, final);
       setHighScore(best);
       setDisplay(final);

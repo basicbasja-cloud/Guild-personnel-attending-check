@@ -15,6 +15,9 @@ import { ReactionTest } from './ReactionTest';
 import { AimTrainer } from './AimTrainer';
 import { SequenceMemory } from './SequenceMemory';
 import { PongGame } from './PongGame';
+import { useLeaderboard } from '../../hooks/useLeaderboard';
+import { Leaderboard } from './Leaderboard';
+import type { GameType } from '../../hooks/useLeaderboard';
 
 interface KpiStatsPageProps {
   currentUserId:  string;
@@ -51,7 +54,8 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { importing, results, bulkImport, reset: resetImport } = useKpiBulkImport();
   const [miniGamesOpen, setMiniGamesOpen] = useState(false);
-  const [activeMiniGame, setActiveMiniGame] = useState<'snake' | 'memory' | 'reaction' | 'aim' | 'sequence' | 'pong'>('snake');
+  const [activeMiniGame, setActiveMiniGame] = useState<GameType>('snake');
+  const lb = useLeaderboard(activeMiniGame, currentUserId);
 
   const isDouble      = useMemo(() => isDoubleWarWeek(weekStart), [weekStart]);
   // War 2 is stored as saturday+1 (Sunday slot) to keep the unique DB constraint intact
@@ -536,11 +540,29 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
                   username={profiles.find(p => p.id === currentUserId)?.character_name || profiles.find(p => p.id === currentUserId)?.username || 'Player'}
                 />
               )}
-              {activeMiniGame === 'memory' && <MemoryMatch />}
-              {activeMiniGame === 'reaction' && <ReactionTest />}
-              {activeMiniGame === 'aim' && <AimTrainer />}
-              {activeMiniGame === 'sequence' && <SequenceMemory />}
-              {activeMiniGame === 'pong' && <PongGame />}
+              {activeMiniGame === 'memory' && (
+                <MemoryMatch onScore={(s) => lb.saveScore(currentUserId, profiles.find(p => p.id === currentUserId)?.username ?? 'Player', s)} />
+              )}
+              {activeMiniGame === 'reaction' && (
+                <ReactionTest onScore={(s) => lb.saveScore(currentUserId, profiles.find(p => p.id === currentUserId)?.username ?? 'Player', s)} />
+              )}
+              {activeMiniGame === 'aim' && (
+                <AimTrainer onScore={(s) => lb.saveScore(currentUserId, profiles.find(p => p.id === currentUserId)?.username ?? 'Player', s)} />
+              )}
+              {activeMiniGame === 'sequence' && (
+                <SequenceMemory onScore={(s) => lb.saveScore(currentUserId, profiles.find(p => p.id === currentUserId)?.username ?? 'Player', s)} />
+              )}
+              {activeMiniGame === 'pong' && (
+                <PongGame onScore={(s) => lb.saveScore(currentUserId, profiles.find(p => p.id === currentUserId)?.username ?? 'Player', s)} />
+              )}
+
+              {/* Leaderboard */}
+              <Leaderboard
+                entries={lb.entries}
+                loading={lb.loading}
+                myBest={lb.myBest}
+                currentUserId={currentUserId}
+              />
             </div>
           </div>
         </div>
