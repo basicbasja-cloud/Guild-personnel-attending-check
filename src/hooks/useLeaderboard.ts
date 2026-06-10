@@ -27,25 +27,37 @@ export function useLeaderboard(gameType: GameType, currentUserId?: string): UseL
   const fetchLeaderboard = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch scores
+      const { data: scoreData, error } = await supabase
         .from('mini_game_scores')
-        .select('user_id, username, score, profiles(character_name)')
+        .select('user_id, username, score')
         .eq('game_type', gameType)
         .order('score', { ascending: false })
         .limit(20);
 
       if (error) throw error;
 
-      const rows = (data ?? []) as {
-        user_id: string;
-        username: string;
-        score: number;
-        profiles: { character_name: string | null }[] | null;
-      }[];
-      const ranked = rows.map((r, i) => ({
+      const scoreRows = (scoreData ?? []) as { user_id: string; username: string; score: number }[];
+
+      // Fetch character names for all users in the leaderboard
+      const userIds = scoreRows.map((r) => r.user_id);
+      let charMap = new Map<string, string | null>();
+      if (userIds.length > 0) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('id, character_name')
+          .in('id', userIds);
+        if (profileData) {
+          for (const p of profileData as { id: string; character_name: string | null }[]) {
+            charMap.set(p.id, p.character_name);
+          }
+        }
+      }
+
+      const ranked = scoreRows.map((r, i) => ({
         user_id: r.user_id,
         username: r.username,
-        character_name: r.profiles?.[0]?.character_name ?? null,
+        character_name: charMap.get(r.user_id) ?? null,
         score: r.score,
         rank: i + 1,
       }));
@@ -72,17 +84,12 @@ export function useLeaderboard(gameType: GameType, currentUserId?: string): UseL
     score: number,
   ): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from('mini_game_scores')
-        .upsert({
-          user_id: userId,
-          username,
-          game_type: gameType,
-          score,
-        }, {
-          onConflict: 'user_id, game_type',
-          ignoreDuplicates: false,
-        });
+      const { error } = await supabase.rpc('upsert_mini_game_score', {
+        p_user_id: userId,
+        p_username: username,
+        p_game_type: gameType,
+        p_score: score,
+      });
 
       if (error) throw error;
 
