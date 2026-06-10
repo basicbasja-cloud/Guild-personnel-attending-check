@@ -60,7 +60,7 @@ export function Leaderboard({ entries, loading, myBest, currentUserId }: Leaderb
               <span className="w-5 text-center text-xs shrink-0">
                 {entry.rank <= 3 ? MEDALS[entry.rank - 1] : `#${entry.rank}`}
               </span>
-              <span className="text-slate-300 text-xs truncate">{entry.username}</span>
+              <span className="text-slate-300 text-xs truncate">{entry.character_name ?? entry.username}</span>
             </div>
             <span className="text-white font-mono text-xs font-bold shrink-0 ml-2">{entry.score}</span>
           </div>

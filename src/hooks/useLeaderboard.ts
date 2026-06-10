@@ -29,18 +29,23 @@ export function useLeaderboard(gameType: GameType, currentUserId?: string): UseL
     try {
       const { data, error } = await supabase
         .from('mini_game_scores')
-        .select('user_id, username, score')
+        .select('user_id, username, score, profiles!user_id(character_name)')
         .eq('game_type', gameType)
         .order('score', { ascending: false })
         .limit(20);
 
       if (error) throw error;
 
-      const rows = (data ?? []) as { user_id: string; username: string; score: number }[];
+      const rows = (data ?? []) as {
+        user_id: string;
+        username: string;
+        score: number;
+        profiles: { character_name: string | null }[] | null;
+      }[];
       const ranked = rows.map((r, i) => ({
         user_id: r.user_id,
         username: r.username,
-        character_name: null as string | null,
+        character_name: r.profiles?.[0]?.character_name ?? null,
         score: r.score,
         rank: i + 1,
       }));
