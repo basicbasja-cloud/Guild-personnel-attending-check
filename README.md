@@ -10,14 +10,25 @@ Hosted on **GitHub Pages** · Backend by **Supabase** · Auth via **Discord OAut
 - 🔐 **Discord OAuth login** — every member uses their unique Discord account
 - 🧪 **Optional Google OAuth login (test only)** — hidden unless explicitly enabled with env flag
 - 📋 **Attendance submission** — members pick **Join / Can't Join / Maybe** for each week
-- 👥 **Roster view** _(management only)_ — see all responses for the current week at a glance
+- 👥 **Roster view** — see all responses for the current week, including who set attendance on behalf of others
+- 📢 **Announcements Board** — guild-wide posts by management with pin-to-top and real-time sync; unread count badge on the tab
 - ⚔️ **War setup builder** _(management only)_:
   - Drag-and-drop members from the available pool into party slots
   - **Up to 60 active members** across groups (each group: 5 parties × 6 people = 30)
   - **Up to 20 substitutes** in a dedicated substitute list
-  - Multiple groups supported
+  - Drag overlay with scale + shadow, drop targets with pulsing glow
   - Swap members between slots, or drag back to the available pool to unassign
-- 🏷️ Each member can set their **character name** and **class / school (job)**
+- 🗺️ **League Board** — interactive war map with phase planning, draggable party markers, enemy markers, and freehand drawing
+- 📅 **Guild Event Calendar** — drag-and-drop event scheduling with color coding
+- 🏆 **KPI Stats** — post-war performance tracking with 6 role classifications, scoring boards, progressive metrics, and **animated score tier scenes** (Recruit 🗡️ → Demon King 👑)
+- 🔥 **Attendance Streaks** — consecutive war attendance tracked with milestone badges (5 = "Hot streak!", 10 = "On fire!", 15 = "Legendary!")
+- 👑 **Title System** — earn titles through attendance milestones (Stalwart, Iron Will, Legendary) or get officer-assigned titles (MVP, custom); active title displays on your member card
+- 🌟 **Member of the Week** — officer-nominated recognition with gold banner on every page
+- 📊 **Player Stats Dashboard** _(management only)_ — 12-week attendance history with export
+- 🔐 **Admin Mode** — PIN-protected account management
+- 🌗 **Light/Dark Theme** — toggle with sun/moon icon in the header; preference saved across sessions
+- 🎨 **Logo color picker** — customize the app logo color; syncs across devices
+- 🏷️ Each member can set their **character name**, **class / school**, and **ultimate skills**
 
 ---
 
