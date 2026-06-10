@@ -10,6 +10,8 @@ import { downloadKpiTemplate, parseKpiExcel } from '../../lib/kpiExcel';
 import type { ParsedKpiRow } from '../../lib/kpiExcel';
 import { useKpiBulkImport } from '../../hooks/useKpiBulkImport';
 import { SnakeGame } from './SnakeGame';
+import { MemoryMatch } from './MemoryMatch';
+import { ReactionTest } from './ReactionTest';
 
 interface KpiStatsPageProps {
   currentUserId:  string;
@@ -45,7 +47,8 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
   const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { importing, results, bulkImport, reset: resetImport } = useKpiBulkImport();
-  const [snakeOpen, setSnakeOpen] = useState(false);
+  const [miniGamesOpen, setMiniGamesOpen] = useState(false);
+  const [activeMiniGame, setActiveMiniGame] = useState<'snake' | 'memory' | 'reaction'>('snake');
 
   const isDouble      = useMemo(() => isDoubleWarWeek(weekStart), [weekStart]);
   // War 2 is stored as saturday+1 (Sunday slot) to keep the unique DB constraint intact
@@ -134,12 +137,12 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
             </>
           )}
 
-          {/* 🐍 Snake game — fun for everyone */}
+          {/* 🎮 Mini Games */}
           <button
-            onClick={() => setSnakeOpen(true)}
+            onClick={() => setMiniGamesOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-purple-900/40 transition-all hover:scale-105 active:scale-95"
           >
-            🐍 Snake Game
+            🎮 Mini Games
           </button>
         </div>
       </div>
@@ -485,29 +488,53 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
         </div>
       )}
 
-      {/* 🐍 Snake Game Modal */}
-      {snakeOpen && (
+      {/* 🎮 Mini Games Modal */}
+      {miniGamesOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col">
+            {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700 shrink-0">
               <div>
                 <h2 className="text-white font-semibold flex items-center gap-2">
-                  🐍 Snake Game
+                  🎮 Mini Games
                 </h2>
                 <p className="text-slate-400 text-xs mt-0.5">
-                  Take a break — eat food, grow longer, set a high score!
+                  Take a break between wars!
                 </p>
               </div>
               <button
-                onClick={() => setSnakeOpen(false)}
+                onClick={() => setMiniGamesOpen(false)}
                 className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 transition-colors"
               >✕</button>
             </div>
+
+            {/* Game tabs */}
+            <div className="flex border-b border-slate-700 px-4">
+              {(['snake', 'memory', 'reaction'] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setActiveMiniGame(g)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    activeMiniGame === g
+                      ? 'border-indigo-500 text-indigo-400'
+                      : 'border-transparent text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {g === 'snake' ? '🐍 Snake' : g === 'memory' ? '🃏 Memory' : '⚡ Reaction'}
+                </button>
+              ))}
+            </div>
+
+            {/* Game content */}
             <div className="px-5 py-4">
-              <SnakeGame
-                userId={currentUserId}
-                username={profiles.find(p => p.id === currentUserId)?.character_name || profiles.find(p => p.id === currentUserId)?.username || 'Player'}
-              />
+              {activeMiniGame === 'snake' && (
+                <SnakeGame
+                  userId={currentUserId}
+                  username={profiles.find(p => p.id === currentUserId)?.character_name || profiles.find(p => p.id === currentUserId)?.username || 'Player'}
+                />
+              )}
+              {activeMiniGame === 'memory' && <MemoryMatch />}
+              {activeMiniGame === 'reaction' && <ReactionTest />}
             </div>
           </div>
         </div>
