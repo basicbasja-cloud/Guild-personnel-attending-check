@@ -2,6 +2,7 @@ import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import type { Profile } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
+import { StreakBadge } from '../streaks/StreakBadge';
 
 interface MemberCardProps {
   id: string;
@@ -14,9 +15,13 @@ interface MemberCardProps {
   compact?: boolean;
   isMaybe?: boolean;
   disabled?: boolean;
+  /** Optional streak count to display */
+  streak?: number;
+  /** Optional active title display */
+  activeTitle?: { icon_emoji: string; name: string } | null;
 }
 
-export function MemberCard({ id, profile, origin, compact = false, isMaybe = false, disabled = false }: MemberCardProps) {
+export function MemberCard({ id, profile, origin, compact = false, isMaybe = false, disabled = false, streak, activeTitle }: MemberCardProps) {
   const { getClassColor } = useClassCatalog();
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
@@ -81,6 +86,14 @@ export function MemberCard({ id, profile, origin, compact = false, isMaybe = fal
               )}
             </div>
           )}
+          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+            {streak != null && streak > 0 && <StreakBadge streak={streak} compact />}
+            {activeTitle && (
+              <span className="text-[9px] px-1 py-0.5 rounded bg-violet-900/50 text-violet-200 border border-violet-600/40 leading-tight">
+                {activeTitle.icon_emoji}{activeTitle.name}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -134,6 +147,14 @@ export function MemberCard({ id, profile, origin, compact = false, isMaybe = fal
               )}
             </>
           )}
+          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+            {streak != null && streak > 0 && <StreakBadge streak={streak} compact />}
+            {activeTitle && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-200 border border-violet-600/40 leading-tight">
+                {activeTitle.icon_emoji} {activeTitle.name}
+              </span>
+            )}
+          </div>
         </div>
       </div>
       <div className="text-slate-500 text-lg select-none">⠿</div>

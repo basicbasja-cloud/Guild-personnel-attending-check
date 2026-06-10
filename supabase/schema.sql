@@ -1008,3 +1008,186 @@ create policy "mini_game_scores_insert_self"
 create index if not exists idx_mini_game_scores_leaderboard
   on public.mini_game_scores (game_type, score desc, created_at desc);
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 10. ANNOUNCEMENTS
+--     Guild-wide messages posted by management
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.announcements (
+  id          uuid        primary key default gen_random_uuid(),
+  title       text        not null,
+  content     text        not null,
+  created_by  uuid        not null references public.profiles(id) on delete cascade,
+  pinned      boolean     not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+alter table public.announcements enable row level security;
+
+create index if not exists idx_announcements_created_at
+  on public.announcements (created_at desc);
+create index if not exists idx_announcements_pinned
+  on public.announcements (pinned desc, created_at desc);
+
+-- All authenticated users can read announcements
+drop policy if exists "announcements_select_auth" on public.announcements;
+create policy "announcements_select_auth"
+  on public.announcements for select
+  using ((select auth.role()) = 'authenticated');
+
+-- Only management can create/update/delete announcements
+drop policy if exists "announcements_insert_mgmt" on public.announcements;
+create policy "announcements_insert_mgmt"
+  on public.announcements for insert
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+drop policy if exists "announcements_update_mgmt" on public.announcements;
+create policy "announcements_update_mgmt"
+  on public.announcements for update
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+drop policy if exists "announcements_delete_mgmt" on public.announcements;
+create policy "announcements_delete_mgmt"
+  on public.announcements for delete
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 11. TITLES SYSTEM
+--     Earnable titles (auto via rules or officer-assigned)
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.titles (
+  id           uuid        primary key default gen_random_uuid(),
+  name         text        not null unique,
+  description  text,
+  icon_emoji   text        not null default '🏅',
+  is_auto      boolean     not null default false,
+  rule_trigger text,       -- e.g. 'streak_5', 'streak_10', 'streak_15', 'attendance_100', 'kpi_mvp'
+  created_at   timestamptz not null default now()
+);
+
+alter table public.titles enable row level security;
+
+-- All authenticated users can read titles
+drop policy if exists "titles_select_auth" on public.titles;
+create policy "titles_select_auth"
+  on public.titles for select
+  using ((select auth.role()) = 'authenticated');
+
+-- Only management can create/update/delete titles
+drop policy if exists "titles_insert_mgmt" on public.titles;
+create policy "titles_insert_mgmt"
+  on public.titles for insert
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+drop policy if exists "titles_update_mgmt" on public.titles;
+create policy "titles_update_mgmt"
+  on public.titles for update
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+drop policy if exists "titles_delete_mgmt" on public.titles;
+create policy "titles_delete_mgmt"
+  on public.titles for delete
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- User-title assignments (earned titles)
+create table if not exists public.user_titles (
+  id         uuid        primary key default gen_random_uuid(),
+  user_id    uuid        not null references public.profiles(id) on delete cascade,
+  title_id   uuid        not null references public.titles(id) on delete cascade,
+  earned_at  timestamptz not null default now(),
+  is_active  boolean     not null default false,
+  is_auto    boolean     not null default false,
+  constraint uq_user_title unique (user_id, title_id)
+);
+
+alter table public.user_titles enable row level security;
+
+create index if not exists idx_user_titles_user_id on public.user_titles (user_id);
+create index if not exists idx_user_titles_active on public.user_titles (user_id) where is_active = true;
+
+-- All authenticated users can read user_titles (needed for profile display)
+drop policy if exists "user_titles_select_auth" on public.user_titles;
+create policy "user_titles_select_auth"
+  on public.user_titles for select
+  using ((select auth.role()) = 'authenticated');
+
+-- Management can assign/remove titles; auto-earn triggers also insert
+drop policy if exists "user_titles_insert_mgmt" on public.user_titles;
+create policy "user_titles_insert_mgmt"
+  on public.user_titles for insert
+  with check ((select auth.role()) = 'authenticated');
+
+drop policy if exists "user_titles_update_mgmt" on public.user_titles;
+create policy "user_titles_update_mgmt"
+  on public.user_titles for update
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+drop policy if exists "user_titles_delete_mgmt" on public.user_titles;
+create policy "user_titles_delete_mgmt"
+  on public.user_titles for delete
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 12. MEMBER OF THE WEEK
+--     Weekly officer-nominated recognition
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.member_of_week (
+  id            uuid        primary key default gen_random_uuid(),
+  user_id       uuid        not null references public.profiles(id) on delete cascade,
+  week_start    date        not null,
+  nominated_by  uuid        references public.profiles(id) on delete set null,
+  reason        text,
+  created_at    timestamptz not null default now(),
+  constraint uq_motw_week unique (week_start)
+);
+
+alter table public.member_of_week enable row level security;
+
+create index if not exists idx_motw_week_start on public.member_of_week (week_start desc);
+
+-- All authenticated users can read
+drop policy if exists "member_of_week_select_auth" on public.member_of_week;
+create policy "member_of_week_select_auth"
+  on public.member_of_week for select
+  using ((select auth.role()) = 'authenticated');
+
+-- Only management can nominate
+drop policy if exists "member_of_week_insert_mgmt" on public.member_of_week;
+create policy "member_of_week_insert_mgmt"
+  on public.member_of_week for insert
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+drop policy if exists "member_of_week_delete_mgmt" on public.member_of_week;
+create policy "member_of_week_delete_mgmt"
+  on public.member_of_week for delete
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 13. SEED TITLES
+--     Built-in auto-earn titles
+-- ─────────────────────────────────────────────────────────────────────────────
+insert into public.titles (name, description, icon_emoji, is_auto, rule_trigger) values
+  ('Stalwart', 'Attended 5 wars in a row', '🔥', true, 'streak_5'),
+  ('Iron Will', 'Attended 10 wars in a row', '⚡', true, 'streak_10'),
+  ('Legendary', 'Attended 15 wars in a row', '💀', true, 'streak_15'),
+  ('Centurion', '100% attendance for a full season', '🏛️', true, 'attendance_100'),
+  ('MVP', 'Awarded by officers for outstanding performance', '🌟', false, NULL)
+on conflict (name) do nothing;
+

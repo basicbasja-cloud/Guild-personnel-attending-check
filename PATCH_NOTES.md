@@ -1,3 +1,52 @@
+# Patch Notes — June 10, 2026
+
+---
+
+## For Guild Members & Officers
+
+### New Features
+
+- **Announcements Board 📢** — A new "Announcements" tab is now available for all members. Management can post guild-wide announcements with pin-to-top support. Announcements appear in real time to everyone — no refresh needed. Unread announcement counts show as a badge on the tab.
+
+- **Member of the Week 🌟** — Officers can nominate a Member of the Week from the management panel. A gold-themed banner appears at the top of every page with the member's name, character, and reason for recognition.
+
+- **Attendance Streaks 🔥** — Your consecutive weeks of joining wars are now tracked! Streak badges appear on your member card. Reach 5 → "Hot streak!", 10 → "On fire!", 15 → "Legendary!" with color shifts from amber to orange to red glow.
+
+- **Title System 👑** — Earn titles through attendance milestones or get assigned by officers. Titles display on your member card in War Setup. You can choose which earned title to show from your Profile page. Built-in titles: Stalwart (🔥 5-week streak), Iron Will (⚡ 10-week), Legendary (💀 15-week), Centurion (🏛️ 100% attendance), and MVP (🌟 officer-awarded).
+
+- **KPI Score Tier Animation 🗡️→👑** — The Your Performance section in KPI Stats now shows your score as an animated battle scene that progresses through ranks:
+  - 🗡️ **Recruit** — Soldier trains on a dummy (score 0–500K)
+  - ⚔️ **Warrior** — Two warriors clash on the battlefield (500K–1.5M)
+  - 🛡️ **Knight** — Shielded defender stands guard (1.5M–3.5M)
+  - 🐉 **Dragon Slayer** — Hero battles a fire-breathing dragon (3.5M–6M)
+  - 👑 **Demon King** — Crowned victor stands over a defeated demon (6M+)
+  
+  Each scene has floating emoji, particle effects, and colored glow. A "RANK UP!" burst fires when you advance to the next tier.
+
+- **Light/Dark Theme Toggle 🌗** — Click the sun/moon icon in the top-right header to switch between dark and light mode. Your preference is saved across sessions and devices. The theme respects your system preference on first visit.
+
+### UI/UX Improvements
+
+- **War Setup Drag Feedback** — Dragging members in War Setup now shows a scaled-up card (×1.08) with a drop shadow. Drop targets glow with a pulsing ring animation. The drop animation is smooth (200ms ease-out).
+
+- **Notification Badges** — Tab navigation shows badge counts for unread announcements and new titles. Badges animate with a scale pulse when counts change.
+
+- **Skeleton Loading** — Announcements show skeleton placeholders while loading, matching final card dimensions — no layout shift.
+
+- **Confetti Celebrations 🎊** — A lightweight canvas confetti system fires celebrations on milestones (streak achievements, title earned, Member of the Week awarded). Non-blocking, auto-clears after 1.5s, max once per 3 seconds.
+
+### For Technical People
+
+- 17 new files across components, hooks, constants, and UI primitives
+- 10 existing files modified (App.tsx, Header, ManagementPage, MemberCard, PartyCard, index.css, index.html, KpiPersonalCard, schema.sql, PatchNotes)
+- 4 new Supabase tables: `announcements`, `titles`, `user_titles`, `member_of_week` with full RLS policies
+- 5 seed titles inserted (Stalwart, Iron Will, Legendary, Centurion, MVP)
+- Light theme uses Tailwind v4 CSS variable overrides to remap the entire palette
+- All new hooks follow existing localStorage + in-memory cache pattern for instant loads
+- Optimistic updates on all CRUD operations (announcements, titles, MotW nominations)
+
+---
+
 # Patch Notes — May 8, 2026
 
 ---

@@ -12,6 +12,8 @@ import type { PartySummaryWithMembers } from './components/league/LeagueBoardPag
 import { GuildCalendarPage } from './components/calendar/GuildCalendarPage';
 import { ProfilePage } from './components/profile/ProfilePage';
 import { KpiStatsPage } from './components/kpi/KpiStatsPage';
+import { AnnouncementsPage } from './components/announcements/AnnouncementsPage';
+import { MemberOfTheWeekBanner } from './components/motw/MemberOfTheWeekBanner';
 import { preloadKpiBoard } from './hooks/useKpiBoard';
 import { preloadLeagueBoard } from './hooks/useLeagueBoard';
 import { preloadKpiProfile } from './hooks/useKpiProfile';
@@ -22,7 +24,7 @@ import { preloadGuildEvents } from './hooks/useGuildEvents';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
-type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league' | 'calendar' | 'kpi';
+type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league' | 'calendar' | 'kpi' | 'announcements';
 
 function AppContent() {
   const auth = useAuth();
@@ -115,6 +117,7 @@ function AppContent() {
   const tabs: { id: Tab; label: string; emoji: string; mgmtOnly?: boolean }[] = [
     { id: 'attendance', label: 'Attendance', emoji: '📋' },
     { id: 'roster', label: 'Roster', emoji: '👥' },
+    { id: 'announcements', label: 'Announcements', emoji: '📢' },
     { id: 'management', label: 'War Setup', emoji: '⚔️', mgmtOnly: true },
     { id: 'dashboard', label: 'Dashboard', emoji: '📊', mgmtOnly: true },
     { id: 'league', label: 'League Board', emoji: '🗺️' },
@@ -138,6 +141,10 @@ function AppContent() {
             onSignOut={auth.signOut}
             onProfileClick={() => setMyProfileOpen(true)}
           />
+        <MemberOfTheWeekBanner
+          isManagement={auth.profile.is_management}
+          userId={auth.profile.id}
+        />
 
         {/* Tab navigation */}
         <div className="bg-slate-900 border-b border-slate-700 px-3 sm:px-4 overflow-x-auto">
@@ -166,6 +173,9 @@ function AppContent() {
             <AttendancePage profile={auth.profile} onUpdateProfile={auth.updateProfile} />
           )}
           {tab === 'roster' && <RosterPage userId={auth.profile.id} isManagement={auth.profile.is_management} />}
+          {tab === 'announcements' && (
+            <AnnouncementsPage isManagement={auth.profile.is_management} userId={auth.profile.id} />
+          )}
           {tab === 'management' && (
             <ManagementPage userId={auth.profile.id} canEdit={auth.profile.is_management} />
           )}

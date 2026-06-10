@@ -92,9 +92,10 @@ function PartySlot({ partyId, groupId, position, member, isMaybe, onRemove, canE
   return (
     <div
       ref={setNodeRef}
-      className={`relative rounded-lg min-h-10 transition-all
+      className={`relative rounded-lg min-h-10 transition-all duration-200
         ${member ? '' : 'border border-dashed border-slate-600 bg-slate-900/40'}
-        ${isOver ? 'ring-2 ring-indigo-500 ring-offset-1 ring-offset-slate-900' : ''}
+        ${isOver ? 'ring-2 ring-indigo-500 ring-offset-1 ring-offset-slate-900 drag-glow scale-[1.02]' : ''}
+        ${isOver && !member ? 'bg-indigo-900/20 border-indigo-500/60' : ''}
       `}
     >
       {member ? (

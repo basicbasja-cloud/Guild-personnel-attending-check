@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useKpiMetrics, metricTrendDisplay, metricTrendDisplayDeaths } from '../../hooks/useKpiMetrics';
 import { useKpiProfile } from '../../hooks/useKpiProfile';
 import { getKpiRoleLabel, formatKpiNumber, computeKpiScore } from '../../constants/kpi';
+import { KpiScoreTierAnimation } from './KpiScoreTierAnimation';
 
 // ─── Personal Card ───────────────────────────────────────────────────────────
 
@@ -117,17 +118,10 @@ export function KpiPersonalCard({ userId, weekStart, isSuperManager }: KpiPerson
           </div>
         </div>
 
-        {/* Score row — super manager only */}
+        {/* Score tier animation — super manager only */}
         {isSuperManager && overallScore > 0 && (
-          <div className="mt-3 flex items-center gap-3">
-            <span className="text-2xl font-bold text-white font-mono tabular-nums">{formatKpiNumber(overallScore)}</span>
-            {personalBest > 0 && (
-              <div className="flex-1 h-2 bg-slate-700/60 rounded-full overflow-hidden max-w-[120px]">
-                <div className="h-full bg-gradient-to-r from-indigo-500 to-amber-400 rounded-full transition-all" style={{ width: `${Math.min(100, (overallScore / personalBest) * 100)}%` }} />
-              </div>
-            )}
-            {personalBest > 0 && overallScore < personalBest && <span className="text-slate-400 text-xs">{formatKpiNumber(personalBest - overallScore)} to beat PB 🎯</span>}
-            {isPB && <span className="text-amber-400 text-xs font-medium animate-pulse">🎉 New Personal Best!</span>}
+          <div className="mt-3">
+            <KpiScoreTierAnimation score={overallScore} isNewBest={isPB} />
           </div>
         )}
 

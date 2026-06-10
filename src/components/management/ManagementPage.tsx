@@ -7,8 +7,10 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  defaultDropAnimationSideEffects,
   type DragStartEvent,
   type DragEndEvent,
+  type DropAnimation,
 } from '@dnd-kit/core';
 import { useDroppable } from '@dnd-kit/core';
 import { useAttendance } from '../../hooks/useAttendance';
@@ -453,14 +455,22 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         )}
       </div>
 
-      {/* Drag overlay */}
-      <DragOverlay>
+      {/* Drag overlay — enhanced with scale, shadow, and smooth drop animation */}
+      <DragOverlay
+        dropAnimation={{
+          duration: 200,
+          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+          sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } }),
+        } satisfies DropAnimation}
+      >
         {activeDrag ? (
-          <MemberCard
-            id={`overlay::${activeDrag.id}`}
-            profile={activeDrag.profile}
-            origin={activeDrag.origin}
-          />
+          <div style={{ transform: 'scale(1.08)', filter: 'drop-shadow(0 8px 32px rgba(0,0,0,0.4))' }}>
+            <MemberCard
+              id={`overlay::${activeDrag.id}`}
+              profile={activeDrag.profile}
+              origin={activeDrag.origin}
+            />
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>

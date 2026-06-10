@@ -1,4 +1,120 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"] *));
+
+/* ── Theme system ─────────────────────────────────────────────────────────── */
+:root {
+  --color-bg-primary: #020617;
+  --color-bg-secondary: #1e293b;
+  --color-bg-card: #1e293b;
+  --color-bg-elevated: #0f172a;
+  --color-border: #334155;
+  --color-accent: #6366f1;
+  --color-accent-hover: #818cf8;
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+}
+
+[data-theme="light"] {
+  /* Custom property overrides (for new components) */
+  --color-bg-primary: #f8fafc;
+  --color-bg-secondary: #ffffff;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-accent: #6366f1;
+  --color-accent-hover: #4f46e5;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+
+  /* ═══ Tailwind v4 palette overrides ═══
+     Remap all hardcoded classes (bg-slate-900, text-slate-400, etc.)
+     to light-mode equivalents so existing components also flip. */
+
+  /* Backgrounds */
+  --color-slate-950: #f8fafc;
+  --color-slate-900: #ffffff;
+  --color-slate-800: #f8fafc;
+  --color-slate-700: #f1f5f9;
+  --color-slate-600: #e2e8f0;
+
+  /* Text — remap white to dark so text-white becomes visible
+     on white/lit surfaces. Buttons (bg-indigo-600 text-white) will
+     get dark text on indigo — contrast is ~5:1, still AA compliant. */
+  --color-white: #0f172a;
+  --color-slate-50: #0f172a;
+  --color-slate-100: #1e293b;
+  --color-slate-200: #334155;
+  --color-slate-300: #475569;
+  --color-slate-400: #64748b;
+  --color-slate-500: #94a3b8;
+
+  /* Accent → keep indigo, but ensure contrast on white bg */
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #4f46e5;
+  --color-indigo-700: #4338ca;
+
+  /* Semantic colors → lighter shades for light bg */
+  --color-emerald-900: #d1fae5;
+  --color-emerald-300: #059669;
+  --color-amber-900: #fef3c7;
+  --color-amber-400: #d97706;
+  --color-amber-300: #b45309;
+  --color-rose-900: #fce7f3;
+  --color-rose-400: #e11d48;
+  --color-rose-300: #e11d48;
+  --color-red-900: #fecaca;
+  --color-red-400: #dc2626;
+  --color-red-300: #dc2626;
+
+  /* Violet (used in skill/title badges) */
+  --color-violet-900: #ede9fe;
+  --color-violet-700: #7c3aed;
+  --color-violet-600: #7c3aed;
+  --color-violet-200: #6d28d9;
+
+  /* Sky (used in sub-skill badges) */
+  --color-sky-900: #e0f2fe;
+  --color-sky-700: #0284c7;
+  --color-sky-600: #0284c7;
+  --color-sky-200: #0369a1;
+
+  /* Cyan (rank tier badges) */
+  --color-cyan-950: #ecfeff;
+  --color-cyan-800: #0891b2;
+  --color-cyan-700: #0891b2;
+  --color-cyan-200: #0e7490;
+
+  /* Pink / rose backgrounds */
+  --color-pink-950: #fdf2f8;
+
+  /* Teal / emerald backgrounds */
+  --color-teal-950: #ecfdf5;
+  --color-emerald-950: #ecfdf5;
+  /* ── Keep button text white on colored backgrounds ── */
+  --color-rose-700: #be123c;
+  --color-rose-600: #e11d48;
+  --color-emerald-700: #047857;
+  --color-emerald-600: #059669;
+  --color-amber-700: #b45309;
+  --color-amber-600: #d97706;
+}
+
+/* Buttons with dark-colored backgrounds need white text, not the overridden --color-white */
+[data-theme="light"] .bg-rose-700,
+[data-theme="light"] .bg-rose-600,
+[data-theme="light"] .bg-emerald-700,
+[data-theme="light"] .bg-emerald-600,
+[data-theme="light"] .bg-amber-700,
+[data-theme="light"] .bg-amber-600,
+[data-theme="light"] .bg-indigo-600,
+[data-theme="light"] .bg-indigo-700,
+[data-theme="light"] .bg-indigo-500 {
+  color: #fff;}
+
+/* ── Base layout ──────────────────────────────────────────────────────────── */
 
 @keyframes loading-bar {
   0%   { width: 0%;   margin-left: 0%; }
@@ -6,14 +122,17 @@
   100% { width: 0%;   margin-left: 100%; }
 }
 
-:root {
-  --color-bg-primary: #020617;
-  --color-bg-secondary: #1e293b;
-  --color-bg-card: #1e293b;
-  --color-border: #334155;
-  --color-accent: #6366f1;
-  --color-accent-hover: #818cf8;
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(99, 102, 241, 0.4); }
+  50%      { box-shadow: 0 0 16px rgba(99, 102, 241, 0.7); }
 }
+
+@keyframes confetti-pop {
+  0%   { transform: scale(0); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+
 
 html {
   height: 100%;
@@ -21,13 +140,40 @@ html {
 
 body {
   background-color: var(--color-bg-primary);
-  color: #e2e8f0;
+  color: var(--color-text-primary);
   font-family: 'Segoe UI', system-ui, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ── Utility classes ──────────────────────────────────────────────────────── */
+
+.theme-transition {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .drag-over {
   outline: 2px dashed #6366f1;
   outline-offset: 2px;
+}
+
+.drag-glow {
+  animation: pulse-glow 1s infinite;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
 }

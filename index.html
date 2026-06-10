@@ -1,11 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/Guild-personnel-attending-check/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Guild War Manager</title>
     <meta name="description" content="Guild war attendance check and party organizer for guild managers" />
+    <script>
+      // Prevent FOUC: apply theme before any React render
+      (function() {
+        var theme = (function() {
+          try { return localStorage.getItem('gwm_theme'); } catch(e) { return null; }
+        })();
+        if (!theme) {
+          theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
