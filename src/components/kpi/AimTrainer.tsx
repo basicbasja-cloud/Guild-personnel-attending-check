@@ -99,7 +99,8 @@ export function AimTrainer({ onScore }: AimTrainerProps) {
       </div>
 
       {/* Game area */}
-      <div className={`relative w-full h-52 rounded-xl overflow-hidden select-none
+      <div
+        className={`relative w-full h-40 sm:h-52 rounded-xl overflow-hidden select-none
         ${phase === 'playing' ? 'bg-slate-800/80 border border-slate-600' : 'bg-slate-800/40 border border-slate-700'}`}
       >
         {phase === 'idle' && (

@@ -497,12 +497,12 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
 
       {/* 🎮 Mini Games Modal */}
       {miniGamesOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[95vh] sm:max-h-[85vh]">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700 shrink-0">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-700 shrink-0">
               <div>
-                <h2 className="text-white font-semibold flex items-center gap-2">
+                <h2 className="text-white font-semibold flex items-center gap-2 text-sm sm:text-base">
                   🎮 Mini Games
                 </h2>
                 <p className="text-slate-400 text-xs mt-0.5">
@@ -511,7 +511,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
               </div>
               <button
                 onClick={() => setMiniGamesOpen(false)}
-                className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 transition-colors"
+                className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 transition-colors shrink-0"
               >✕</button>
             </div>
 
@@ -533,7 +533,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
             </div>
 
             {/* Game content */}
-            <div className="px-5 py-4">
+            <div className="px-4 sm:px-5 py-4 overflow-y-auto flex-1">
               {activeMiniGame === 'snake' && (
                 <SnakeGame
                   userId={currentUserId}

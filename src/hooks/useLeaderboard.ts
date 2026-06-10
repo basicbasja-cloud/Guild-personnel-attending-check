@@ -29,7 +29,7 @@ export function useLeaderboard(gameType: GameType, currentUserId?: string): UseL
     try {
       const { data, error } = await supabase
         .from('mini_game_scores')
-        .select('user_id, username, score, profiles!user_id(character_name)')
+        .select('user_id, username, score, profiles(character_name)')
         .eq('game_type', gameType)
         .order('score', { ascending: false })
         .limit(20);
