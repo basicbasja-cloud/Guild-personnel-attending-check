@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAnnouncements } from '../../hooks/useAnnouncements';
 import { AnnouncementEditorModal } from './AnnouncementEditorModal';
 import type { Announcement } from '../../hooks/useAnnouncements';
@@ -6,6 +6,8 @@ import type { Announcement } from '../../hooks/useAnnouncements';
 interface AnnouncementsPageProps {
   isManagement: boolean;
   userId: string;
+  onAnnouncementsLoaded?: (ids: string[]) => void;
+  onTabOpened?: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -17,8 +19,19 @@ function formatTime(iso: string): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-export function AnnouncementsPage({ isManagement, userId }: AnnouncementsPageProps) {
+export function AnnouncementsPage({ isManagement, userId, onAnnouncementsLoaded, onTabOpened }: AnnouncementsPageProps) {
   const { announcements, loading, error, create, update, remove } = useAnnouncements(isManagement, userId);
+
+  // Emit announcement IDs for badge tracking
+  useEffect(() => {
+    if (announcements.length > 0) {
+      onAnnouncementsLoaded?.(announcements.map((a) => a.id));
+    }
+  }, [announcements, onAnnouncementsLoaded]);
+
+  useEffect(() => {
+    onTabOpened?.();
+  }, [onTabOpened]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Announcement | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);

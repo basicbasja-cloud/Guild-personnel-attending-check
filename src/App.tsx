@@ -14,6 +14,7 @@ import { ProfilePage } from './components/profile/ProfilePage';
 import { KpiStatsPage } from './components/kpi/KpiStatsPage';
 import { AnnouncementsPage } from './components/announcements/AnnouncementsPage';
 import { MemberOfTheWeekBanner } from './components/motw/MemberOfTheWeekBanner';
+import { Badge } from './components/ui/Badge';
 import { preloadKpiBoard } from './hooks/useKpiBoard';
 import { preloadLeagueBoard } from './hooks/useLeagueBoard';
 import { preloadKpiProfile } from './hooks/useKpiProfile';
@@ -32,6 +33,16 @@ function AppContent() {
   const isGoogleLoginEnabled = import.meta.env.VITE_ENABLE_GOOGLE_LOGIN === 'true';
   const warSetup = useWarSetup();
   const [myProfileOpen, setMyProfileOpen] = useState(false);
+
+  // ── Notification badges ────────────────────────────────────────────
+  const [announcementIds, setAnnouncementIds] = useState<string[]>([]);
+  const badgeUnread = useMemo(() => {
+    if (announcementIds.length === 0) return 0;
+    const lastRead = (() => { try { return localStorage.getItem('gwm_last_read_announcement'); } catch { return null; } })();
+    if (!lastRead) return announcementIds.length;
+    const idx = announcementIds.indexOf(lastRead);
+    return idx > 0 ? idx : 0;
+  }, [announcementIds]);
 
   // Flat list of all parties with full member data (for League Board).
   // Preserve the last non-empty list so the board never briefly shows empty
@@ -152,7 +163,12 @@ function AppContent() {
             {visibleTabs.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => {
+                  setTab(t.id);
+                  if (t.id === 'announcements') {
+                    try { localStorage.setItem('gwm_last_read_announcement', announcementIds[0] ?? ''); } catch {}
+                  }
+                }}
                 className={`shrink-0 flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors
                   ${
                     tab === t.id
@@ -161,7 +177,10 @@ function AppContent() {
                   }`}
               >
                 <span>{t.emoji}</span>
-                <span>{t.label}</span>
+                <span className="flex items-center gap-1.5">
+                  {t.label}
+                  {t.id === 'announcements' && <Badge count={badgeUnread} />}
+                </span>
               </button>
             ))}
           </div>
@@ -174,7 +193,14 @@ function AppContent() {
           )}
           {tab === 'roster' && <RosterPage userId={auth.profile.id} isManagement={auth.profile.is_management} />}
           {tab === 'announcements' && (
-            <AnnouncementsPage isManagement={auth.profile.is_management} userId={auth.profile.id} />
+            <AnnouncementsPage
+              isManagement={auth.profile.is_management}
+              userId={auth.profile.id}
+              onAnnouncementsLoaded={(ids) => setAnnouncementIds(ids)}
+              onTabOpened={() => {
+                try { localStorage.setItem('gwm_last_read_announcement', announcementIds[0] ?? ''); } catch {}
+              }}
+            />
           )}
           {tab === 'management' && (
             <ManagementPage userId={auth.profile.id} canEdit={auth.profile.is_management} />
