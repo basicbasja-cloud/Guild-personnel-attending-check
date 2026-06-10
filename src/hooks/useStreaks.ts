@@ -117,7 +117,7 @@ async function fetchLeaderboard(): Promise<StreakLeaderboardEntry[]> {
 
   // Group by user
   const userMap = new Map<string, { weeks: string[]; username: string; character_name: string | null }>();
-  for (const row of data as {
+  for (const row of data as unknown as {
     user_id: string;
     week_start: string;
     profile: { username: string; character_name: string | null } | null;

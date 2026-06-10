@@ -1,5 +1,4 @@
 import { useMemberOfWeek } from '../../hooks/useMemberOfWeek';
-import { useConfetti } from '../../hooks/useConfetti';
 
 interface MemberOfTheWeekBannerProps {
   isManagement: boolean;
@@ -8,8 +7,7 @@ interface MemberOfTheWeekBannerProps {
 }
 
 export function MemberOfTheWeekBanner({ isManagement }: MemberOfTheWeekBannerProps) {
-  const { current, loading, nominate } = useMemberOfWeek(isManagement);
-  const confetti = useConfetti();
+  const { current, loading } = useMemberOfWeek(isManagement);
 
   if (loading || !current) return null;
 

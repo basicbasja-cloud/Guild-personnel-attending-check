@@ -20,7 +20,6 @@ export interface Announcement {
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_KEY = 'gwm_announcements';
 
-const memCache: { at: number; data: Announcement[] } | null = null;
 let memCacheData: Announcement[] | null = null;
 let memCacheAt = 0;
 
@@ -109,7 +108,7 @@ export function useAnnouncements(isManagement: boolean, userId?: string): UseAnn
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'announcements' },
-        (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+        (_payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
           // Refetch on any change
           fetch();
         },

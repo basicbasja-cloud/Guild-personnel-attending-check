@@ -42,7 +42,7 @@ export function useNotificationBadges(
   announcements: { id: string }[],
   earnedDates: string[], // ISO timestamps of recently earned titles
 ): UseNotificationBadgesResult {
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed] = useState(false);
 
   const counts = useMemo(() => {
     // Announcement badges: unread count = announcements newer than last read

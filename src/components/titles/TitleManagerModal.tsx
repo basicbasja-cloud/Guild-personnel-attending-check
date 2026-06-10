@@ -3,7 +3,7 @@ import { useAllTitles } from '../../hooks/useTitles';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { supabase } from '../../lib/supabase';
 import { TitleBadge } from './TitleBadge';
-import type { Title, UserTitle } from '../../hooks/useTitles';
+import type { UserTitle } from '../../hooks/useTitles';
 import type { Profile } from '../../types';
 
 interface TitleManagerModalProps {
