@@ -121,7 +121,17 @@ export function useMemberOfWeek(isManagement: boolean): UseMemberOfWeekResult {
     if (!isManagement) return false;
     const weekStart = getCurrentWeekStart();
 
-    // Optimistic update
+    // Optimistic update with profile info from a quick fetch
+    let tempProfile: MemberOfWeek['profile'] = null;
+    try {
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('username, character_name, avatar_url, character_class')
+        .eq('id', userId)
+        .single();
+      tempProfile = p as MemberOfWeek['profile'];
+    } catch { /* ignore */ }
+
     const temp: MemberOfWeek = {
       id: `temp-${Date.now()}`,
       user_id: userId,
@@ -129,11 +139,11 @@ export function useMemberOfWeek(isManagement: boolean): UseMemberOfWeekResult {
       nominated_by: null,
       reason,
       created_at: new Date().toISOString(),
+      profile: tempProfile,
     };
     setCurrent(temp);
 
     try {
-      // Upsert: only one per week
       const { error: err } = await supabase
         .from('member_of_week')
         .upsert({

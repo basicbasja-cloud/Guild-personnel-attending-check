@@ -12,6 +12,9 @@ import { useKpiBulkImport } from '../../hooks/useKpiBulkImport';
 import { SnakeGame } from './SnakeGame';
 import { MemoryMatch } from './MemoryMatch';
 import { ReactionTest } from './ReactionTest';
+import { AimTrainer } from './AimTrainer';
+import { SequenceMemory } from './SequenceMemory';
+import { PongGame } from './PongGame';
 
 interface KpiStatsPageProps {
   currentUserId:  string;
@@ -48,7 +51,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { importing, results, bulkImport, reset: resetImport } = useKpiBulkImport();
   const [miniGamesOpen, setMiniGamesOpen] = useState(false);
-  const [activeMiniGame, setActiveMiniGame] = useState<'snake' | 'memory' | 'reaction'>('snake');
+  const [activeMiniGame, setActiveMiniGame] = useState<'snake' | 'memory' | 'reaction' | 'aim' | 'sequence' | 'pong'>('snake');
 
   const isDouble      = useMemo(() => isDoubleWarWeek(weekStart), [weekStart]);
   // War 2 is stored as saturday+1 (Sunday slot) to keep the unique DB constraint intact
@@ -509,18 +512,18 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
             </div>
 
             {/* Game tabs */}
-            <div className="flex border-b border-slate-700 px-4">
-              {(['snake', 'memory', 'reaction'] as const).map((g) => (
+            <div className="flex border-b border-slate-700 px-2 overflow-x-auto">
+              {(['snake', 'memory', 'reaction', 'aim', 'sequence', 'pong'] as const).map((g) => (
                 <button
                   key={g}
                   onClick={() => setActiveMiniGame(g)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  className={`shrink-0 px-3 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors ${
                     activeMiniGame === g
                       ? 'border-indigo-500 text-indigo-400'
                       : 'border-transparent text-slate-400 hover:text-white'
                   }`}
                 >
-                  {g === 'snake' ? '🐍 Snake' : g === 'memory' ? '🃏 Memory' : '⚡ Reaction'}
+                  {g === 'snake' ? '🐍 Snake' : g === 'memory' ? '🃏 Memory' : g === 'reaction' ? '⚡ Reaction' : g === 'aim' ? '🎯 Aim' : g === 'sequence' ? '🔢 Sequence' : '🏓 Pong'}
                 </button>
               ))}
             </div>
@@ -535,6 +538,9 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
               )}
               {activeMiniGame === 'memory' && <MemoryMatch />}
               {activeMiniGame === 'reaction' && <ReactionTest />}
+              {activeMiniGame === 'aim' && <AimTrainer />}
+              {activeMiniGame === 'sequence' && <SequenceMemory />}
+              {activeMiniGame === 'pong' && <PongGame />}
             </div>
           </div>
         </div>
