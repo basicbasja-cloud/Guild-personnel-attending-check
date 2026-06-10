@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useProfilePage } from '../../hooks/useProfilePage';
+import { TitleSelector } from '../titles/TitleSelector';
 import type { ProfileSkill } from '../../types';
 
 // ─── class colour badge map ──────────────────────────────────────────────────
@@ -228,6 +229,14 @@ export function ProfilePage({ userId, currentUserId, isManagement, readOnly = fa
                 </>
               )}
             </section>
+
+            {/* ─── Active Title ─── */}
+            {userId === currentUserId && (
+              <section>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-violet-400 mb-2">👑 Active Title</h3>
+                <TitleSelector userId={userId} />
+              </section>
+            )}
 
             {/* ─── Hero Skills ─── */}
             <section>

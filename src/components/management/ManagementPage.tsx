@@ -22,6 +22,8 @@ import type { Profile, WarPartyMember } from '../../types';
 import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
 import { downloadCsv } from '../../lib/exportCsv';
+import { TitleManagerModal } from '../titles/TitleManagerModal';
+import { MotWNominationModal } from '../motw/MotWNominationModal';
 
 interface ManagementPageProps {
   userId: string;
@@ -48,6 +50,8 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
   const [activeDrag, setActiveDrag] = useState<ActiveDragData | null>(null);
   const [swappingPartyId, setSwappingPartyId] = useState<string | null>(null);
+  const [titleManagerOpen, setTitleManagerOpen] = useState(false);
+  const [motwOpen, setMotwOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
@@ -380,6 +384,25 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         {classDistribution.length > 0 && (
           <ClassDistributionCard distribution={classDistribution} getClassColor={getClassColor} />
         )}
+
+        {/* Management actions */}
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <button
+              onClick={() => setTitleManagerOpen(true)}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+            >
+              👑 Title Manager
+            </button>
+            <button
+              onClick={() => setMotwOpen(true)}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+            >
+              🌟 Nominate MotW
+            </button>
+          </div>
+        )}
+
         {war.data && (
           <div className="flex justify-end mt-2 mb-4">
             <button
@@ -454,6 +477,14 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
           </div>
         )}
       </div>
+
+      {/* Management modals */}
+      {titleManagerOpen && (
+        <TitleManagerModal isOpen={titleManagerOpen} onClose={() => setTitleManagerOpen(false)} />
+      )}
+      {motwOpen && (
+        <MotWNominationModal isOpen={motwOpen} onClose={() => setMotwOpen(false)} />
+      )}
 
       {/* Drag overlay — enhanced with scale, shadow, and smooth drop animation */}
       <DragOverlay
