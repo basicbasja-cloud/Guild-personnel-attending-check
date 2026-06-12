@@ -22,6 +22,8 @@ import { preloadProfiles } from './hooks/useAllProfiles';
 import { preloadAttendance } from './hooks/useAttendance';
 import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
 import { preloadGuildEvents } from './hooks/useGuildEvents';
+import { useTrainingNotification } from './hooks/useTrainingNotification';
+import { FloatingNotification } from './components/ui/FloatingNotification';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
@@ -33,6 +35,10 @@ function AppContent() {
   const isGoogleLoginEnabled = import.meta.env.VITE_ENABLE_GOOGLE_LOGIN === 'true';
   const warSetup = useWarSetup();
   const [myProfileOpen, setMyProfileOpen] = useState(false);
+
+  // ── Training notification ──────────────────────────────────────────
+  const { notification: trainingNotif, dismissed: trainingNotifDismissed, dismiss: dismissTrainingNotif } =
+    useTrainingNotification(auth.profile?.id ?? '');
 
   // ── Notification badges ────────────────────────────────────────────
   const [announcementIds, setAnnouncementIds] = useState<string[]>([]);
@@ -234,6 +240,18 @@ function AppContent() {
             />
           )}
         </main>
+
+        {/* Floating training notification */}
+        {trainingNotif && !trainingNotifDismissed && (
+          <FloatingNotification
+            event={trainingNotif.event}
+            onDismiss={dismissTrainingNotif}
+            onClick={() => {
+              dismissTrainingNotif();
+              setTab('calendar');
+            }}
+          />
+        )}
       </div>
 
       {/* My Profile modal — always editable (own profile) */}

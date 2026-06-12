@@ -21,7 +21,9 @@ import {
 } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { useGuildEvents } from '../../hooks/useGuildEvents';
-import type { GuildEvent, GuildEventColor } from '../../types';
+import { TrainingAttendanceModal } from '../attendance/TrainingAttendanceModal';
+import { TrainingSetupModal } from '../attendance/TrainingSetupModal';
+import type { GuildEvent, GuildEventColor, EventType } from '../../types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const COLOR_MAP: Record<GuildEventColor, { bg: string; text: string; border: string; btn: string }> = {
@@ -34,6 +36,14 @@ const COLOR_MAP: Record<GuildEventColor, { bg: string; text: string; border: str
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // ─── EventChip (draggable) ────────────────────────────────────────────────────
+const EVENT_TYPE_ICONS: Record<string, string> = {
+  war: '⚔️',
+  training: '🏋️',
+};
+function getEventIcon(eventType: string): string {
+  return EVENT_TYPE_ICONS[eventType] ?? '📅';
+}
+
 function EventChip({
   event, isDragging = false, compact = false, onClick,
 }: {
@@ -43,15 +53,17 @@ function EventChip({
   onClick?: (e: React.MouseEvent) => void;
 }) {
   const { bg, text } = COLOR_MAP[event.color] ?? COLOR_MAP.indigo;
+  const icon = getEventIcon(event.event_type);
   return (
     <div
       className={`${bg} ${text} rounded px-1.5 py-0.5 text-xs font-medium truncate cursor-pointer select-none
         ${isDragging ? 'shadow-2xl ring-2 ring-white/40 opacity-90' : 'hover:brightness-110 hover:shadow-md'}
         ${compact ? 'max-w-[90%]' : 'w-full'} transition-all`}
       onClick={onClick}
-      title={event.title + (event.start_time ? ` — ${event.start_time}` : '')}
+      title={`[${event.event_type}] ${event.title}${event.start_time ? ` — ${event.start_time}` : ''}`}
     >
       {event.start_time && <span className="opacity-70 mr-1">{event.start_time}</span>}
+      <span className="mr-0.5">{icon}</span>
       {event.title}
     </div>
   );
@@ -137,17 +149,24 @@ interface EventModalProps {
   initial?: Partial<GuildEvent>;
   defaultDate?: string | null;
   userId: string;
+  isManagement?: boolean;
   onSave: (payload: Omit<GuildEvent, 'id' | 'created_at' | 'updated_at'>) => void;
   onDelete?: () => void;
   onClose: () => void;
 }
 
-function EventModal({ initial, defaultDate, userId, onSave, onDelete, onClose }: EventModalProps) {
+const EVENT_TYPE_PRESETS = ['war', 'training', 'internal_event', 'meeting', 'social'];
+
+function EventModal({ initial, defaultDate, userId, isManagement, onSave, onDelete, onClose }: EventModalProps) {
   const [title, setTitle]       = useState(initial?.title ?? '');
   const [description, setDesc]  = useState(initial?.description ?? '');
   const [date, setDate]         = useState(initial?.event_date ?? defaultDate ?? '');
   const [time, setTime]         = useState(initial?.start_time ?? '');
   const [color, setColor]       = useState<GuildEventColor>(initial?.color ?? 'indigo');
+  const [eventType, setEventType] = useState<EventType>(initial?.event_type ?? 'war');
+  const [customType, setCustomType] = useState(
+    initial?.event_type && !EVENT_TYPE_PRESETS.includes(initial.event_type) ? initial.event_type : ''
+  );
   const isEdit = !!initial?.id;
 
   useEffect(() => {
@@ -158,12 +177,14 @@ function EventModal({ initial, defaultDate, userId, onSave, onDelete, onClose }:
 
   const handleSave = () => {
     if (!title.trim()) return;
+    const resolvedType = (customType || eventType).trim().toLowerCase().replace(/\s+/g, '_') || 'war';
     onSave({
       title: title.trim(),
       description: description.trim() || null,
       event_date: date || null,
       start_time: time || null,
       color,
+      event_type: resolvedType,
       created_by: userId,
     });
     onClose();
@@ -202,6 +223,43 @@ function EventModal({ initial, defaultDate, userId, onSave, onDelete, onClose }:
               placeholder="Optional description…"
               className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:ring-1 focus:ring-indigo-400" />
           </div>
+          {isManagement && (
+            <div>
+              <label className="text-xs text-slate-400 uppercase tracking-wider block mb-2">Event Type</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {EVENT_TYPE_PRESETS.map((preset) => {
+                  const isActive = eventType === preset && !customType;
+                  const icon = getEventIcon(preset);
+                  return (
+                    <button
+                      key={preset}
+                      onClick={() => { setEventType(preset); setCustomType(''); }}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                        isActive
+                          ? 'bg-indigo-900/40 border-indigo-500 text-indigo-300'
+                          : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
+                      }`}
+                    >
+                      {icon} {preset.replace(/_/g, ' ')}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">or custom:</span>
+                <input
+                  type="text"
+                  value={customType}
+                  onChange={(e) => {
+                    setCustomType(e.target.value);
+                    if (e.target.value) setEventType('');
+                  }}
+                  placeholder="e.g. internal_event"
+                  className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+          )}
           <div>
             <label className="text-xs text-slate-400 uppercase tracking-wider block mb-2">Colour</label>
             <div className="flex gap-2">
@@ -251,6 +309,9 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
   const [editingEvent, setEditingEvent] = useState<GuildEvent | null>(null);
   const [createDate, setCreateDate]     = useState<string | null>(null);
   const [draggedEvent, setDraggedEvent] = useState<GuildEvent | null>(null);
+  const [trainingAttModalOpen, setTrainingAttModalOpen] = useState(false);
+  const [trainingSetupModalOpen, setTrainingSetupModalOpen] = useState(false);
+  const [trainingEvent, setTrainingEvent] = useState<GuildEvent | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -305,10 +366,16 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
   }, []);
 
   const openEdit = useCallback((ev: GuildEvent) => {
+    if (ev.event_type === 'training' && isManagement) {
+      // Training events: open attendance + war setup view
+      setTrainingEvent(ev);
+      setTrainingAttModalOpen(true);
+      return;
+    }
     setEditingEvent(ev);
     setCreateDate(null);
     setModalOpen(true);
-  }, []);
+  }, [isManagement]);
 
   const handleSave = useCallback((payload: Omit<GuildEvent, 'id' | 'created_at' | 'updated_at'>) => {
     if (editingEvent) {
@@ -318,6 +385,12 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
     }
   }, [editingEvent, updateEvent, createEvent, userId]);
 
+  const handleTrainingClose = useCallback(() => {
+    setTrainingAttModalOpen(false);
+    setTrainingSetupModalOpen(false);
+    setTrainingEvent(null);
+  }, []);
+
   const handleDelete = useCallback(() => {
     if (editingEvent) deleteEvent(editingEvent.id);
   }, [editingEvent, deleteEvent]);
@@ -326,14 +399,15 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
   const weekDayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={(e) => {
-        const ev = events.find((x) => x.id === String(e.active.id));
-        if (ev) setDraggedEvent(ev);
-      }}
-      onDragEnd={handleDragEnd}
-    >
+    <>
+      <DndContext
+        sensors={sensors}
+        onDragStart={(e) => {
+          const ev = events.find((x) => x.id === String(e.active.id));
+          if (ev) setDraggedEvent(ev);
+        }}
+        onDragEnd={handleDragEnd}
+      >
       <div className="flex h-full min-h-0 overflow-hidden">
         {/* ── Left sidebar (unscheduled) — managers only ── */}
         {isManagement && (
@@ -448,11 +522,37 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
           initial={editingEvent ?? undefined}
           defaultDate={createDate}
           userId={userId}
+          isManagement={isManagement}
           onSave={handleSave}
           onDelete={editingEvent ? handleDelete : undefined}
           onClose={() => setModalOpen(false)}
         />
       )}
+
+      {/* Training Attendance Modal */}
+      {trainingAttModalOpen && trainingEvent && (
+        <TrainingAttendanceModal
+          event={trainingEvent}
+          currentUserId={userId}
+          isManagement={isManagement}
+          onClose={handleTrainingClose}
+          onManageSetup={() => {
+            setTrainingAttModalOpen(false);
+            setTrainingSetupModalOpen(true);
+          }}
+        />
+      )}
     </DndContext>
+
+      {/* Training Setup — full page, outside calendar DndContext to avoid nested DnD conflicts */}
+      {trainingSetupModalOpen && trainingEvent && (
+        <TrainingSetupModal
+          event={trainingEvent}
+          currentUserId={userId}
+          isManagement={isManagement}
+          onClose={handleTrainingClose}
+        />
+      )}
+    </>
   );
 }

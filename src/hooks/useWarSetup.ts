@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { withDbTiming } from '../lib/dbTiming';
 import { getUpcomingSaturday } from '../lib/week';
 import { syncEngine } from '../lib/syncEngine';
-import type { WarSetup, WarGroup, WarParty, WarPartyMember, Profile } from '../types';
+import type { WarSetup, WarGroup, WarParty, WarPartyMember, Profile, EventType } from '../types';
 import { MAX_PARTIES_PER_GROUP } from '../types';
 
 export interface WarSetupData {
@@ -30,30 +30,37 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 // In-memory hot cache — avoids JSON.parse on every mount after first load
 const hotCache = new Map<string, { at: number; data: WarSetupData }>();
 
-function readCache(weekStr: string): { at: number; data: WarSetupData } | null {
+function cacheKey(weekStr: string, eventType: EventType, eventId?: string): string {
+  if (eventType === 'training' && eventId) return `training_${eventId}`;
+  return weekStr;
+}
+
+function readCache(weekStr: string, eventType: EventType = 'war', eventId?: string): { at: number; data: WarSetupData } | null {
+  const key = cacheKey(weekStr, eventType, eventId);
   // Check RAM first
-  const hot = hotCache.get(weekStr);
+  const hot = hotCache.get(key);
   if (hot) return hot;
   // Fall back to localStorage
   try {
-    const raw = localStorage.getItem(CACHE_PREFIX + weekStr);
+    const raw = localStorage.getItem(CACHE_PREFIX + key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     // Guard against old cache format with missing/null arrays
     if (!parsed?.data || !Array.isArray(parsed.data.groups) || !Array.isArray(parsed.data.substitutes)) return null;
     const entry = parsed as { at: number; data: WarSetupData };
-    hotCache.set(weekStr, entry); // promote to RAM
+    hotCache.set(key, entry); // promote to RAM
     return entry;
   } catch {
     return null;
   }
 }
 
-function writeCache(weekStr: string, data: WarSetupData) {
+function writeCache(weekStr: string, data: WarSetupData, eventType: EventType = 'war', eventId?: string) {
+  const key = cacheKey(weekStr, eventType, eventId);
   const entry = { at: Date.now(), data };
-  hotCache.set(weekStr, entry); // keep in RAM
+  hotCache.set(key, entry); // keep in RAM
   try {
-    localStorage.setItem(CACHE_PREFIX + weekStr, JSON.stringify(entry));
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
   } catch {
     // Ignore quota errors.
   }
@@ -122,16 +129,25 @@ function placeUserInData(
 
 // ── Database loader ─────────────────────────────────────────────────────────
 
-async function loadSetupData(weekStartStr: string): Promise<WarSetupData | null> {
+async function loadSetupData(
+  weekStartStr: string,
+  eventType: EventType = 'war',
+  eventId?: string
+): Promise<WarSetupData | null> {
+  let query = supabase
+    .from('war_setups')
+    .select('*');
+
+  if (eventType === 'training' && eventId) {
+    query = query.eq('event_id', eventId).eq('type', 'training');
+  } else {
+    query = query.eq('week_start', weekStartStr).eq('type', 'war');
+  }
+
   const { data: setupData, error: setupErr } = await withDbTiming(
     'GET',
-    `war_setups.byWeek week=${weekStartStr}`,
-    () =>
-      supabase
-        .from('war_setups')
-        .select('*')
-        .eq('week_start', weekStartStr)
-        .maybeSingle()
+    eventType === 'training' ? `war_setups.byEvent event=${eventId}` : `war_setups.byWeek week=${weekStartStr}`,
+    () => query.maybeSingle()
   );
 
   if (setupErr || !setupData) return null;
@@ -195,7 +211,7 @@ async function loadSetupData(weekStartStr: string): Promise<WarSetupData | null>
   });
 
   const result: WarSetupData = { setup, groups: groupsWithParties, substitutes };
-  writeCache(weekStartStr, result);
+  writeCache(weekStartStr, result, eventType, eventId);
   return result;
 }
 
@@ -210,13 +226,15 @@ export async function preloadWarSetup(weekStart?: Date): Promise<void> {
   await loadSetupData(weekStartStr).catch((err) => { console.error('[preloadWarSetup]', err); });
 }
 
-export function useWarSetup(weekStart?: Date) {
+export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: string) {
   const currentWeekStart = getUpcomingSaturday(weekStart ?? new Date());
   const weekStartStr = formatISO(currentWeekStart, { representation: 'date' });
+  const setupType: EventType = eventType ?? 'war';
+  const isTraining = setupType === 'training';
 
   // Seed state from localStorage cache so UI is instantly populated
   const [data, setData] = useState<WarSetupData | null>(() => {
-    const cached = readCache(weekStartStr);
+    const cached = readCache(weekStartStr, setupType, eventId);
     return cached?.data ?? null;
   });
   const [loading, setLoading] = useState(false);
@@ -225,33 +243,30 @@ export function useWarSetup(weekStart?: Date) {
   const fetchSetup = useCallback(async () => {
     setError(null);
     try {
-      const result = await loadSetupData(weekStartStr);
+      const result = await loadSetupData(weekStartStr, setupType, eventId);
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     }
-  }, [weekStartStr]);
+  }, [weekStartStr, setupType, eventId]);
 
   // Initial load: serve cache instantly, then refresh in background
   useEffect(() => {
     let cancelled = false;
-    const cached = readCache(weekStartStr);
+    const cached = readCache(weekStartStr, setupType, eventId);
     if (cached?.data) {
       setData(cached.data);
       if (Date.now() - cached.at < CACHE_TTL_MS) return; // Cache is fresh
     } else {
       setLoading(true);
     }
-    loadSetupData(weekStartStr)
+    loadSetupData(weekStartStr, setupType, eventId)
       .then((result) => { if (!cancelled) { setData(result); setLoading(false); } })
       .catch((e) => { if (!cancelled) { setError(e instanceof Error ? e.message : 'Unknown error'); setLoading(false); } });
     return () => { cancelled = true; };
-  }, [weekStartStr]);
+  }, [weekStartStr, setupType, eventId]);
 
   // Realtime subscription — watch war_party_members for this setup.
-  // The syncEngine tick writes to DB; the realtime event re-confirms server
-  // state. We skip the refresh while mutations are still pending to avoid
-  // overwriting in-flight optimistic updates.
   useEffect(() => {
     if (!data?.setup.id) return;
     const setupId = data.setup.id;
@@ -264,7 +279,7 @@ export function useWarSetup(weekStart?: Date) {
       refreshInFlight = true;
       pendingRefresh = false;
       try {
-        const result = await loadSetupData(weekStartStr);
+        const result = await loadSetupData(weekStartStr, setupType, eventId);
         setData(result);
       } finally {
         refreshInFlight = false;
@@ -285,37 +300,9 @@ export function useWarSetup(weekStart?: Date) {
       channel.unsubscribe().finally(() => supabase.removeChannel(channel));
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.setup.id, weekStartStr]);
+  }, [data?.setup.id, weekStartStr, setupType, eventId]);
 
-  const createSetup = async (createdBy: string) => {
-    const { data: existing } = await withDbTiming(
-      'GET',
-      `war_setups.exists week=${weekStartStr}`,
-      () =>
-        supabase
-          .from('war_setups')
-          .select('id')
-          .eq('week_start', weekStartStr)
-          .maybeSingle()
-    );
-
-    if (existing) { await fetchSetup(); return; }
-
-    const { data: setup, error: err } = await withDbTiming(
-      'POST',
-      `war_setups.create week=${weekStartStr}`,
-      () =>
-        supabase
-          .from('war_setups')
-          .insert({ week_start: weekStartStr, created_by: createdBy })
-          .select()
-          .single()
-    );
-
-    if (err) { setError(err.message); return; }
-
-    // Auto-create fixed Group A (parties 1-5) and Group B (parties 6-10)
-    const setupId = (setup as WarSetup).id;
+  const createDefaultGroups = async (setupId: string) => {
     const FIXED_GROUPS = [
       { group_number: 1, name: 'Group A' },
       { group_number: 2, name: 'Group B' },
@@ -334,7 +321,75 @@ export function useWarSetup(weekStart?: Date) {
         await supabase.from('war_parties').insert(partyRows);
       }
     }
+  };
 
+  const createSetup = async (createdBy: string) => {
+    if (isTraining && eventId) {
+      const { data: existing } = await withDbTiming(
+        'GET',
+        `war_setups.exists event=${eventId}`,
+        () =>
+          supabase
+            .from('war_setups')
+            .select('id')
+            .eq('event_id', eventId)
+            .eq('type', 'training')
+            .maybeSingle()
+      );
+      if (existing) { await fetchSetup(); return; }
+
+      const { data: setup, error: err } = await withDbTiming(
+        'POST',
+        `war_setups.createTraining event=${eventId}`,
+        () =>
+          supabase
+            .from('war_setups')
+            .insert({
+              week_start: weekStartStr,
+              type: 'training',
+              event_id: eventId,
+              created_by: createdBy,
+            })
+            .select()
+            .single()
+      );
+
+      if (err) { setError(err.message); return; }
+      const setupId = (setup as WarSetup).id;
+      await createDefaultGroups(setupId);
+      await fetchSetup();
+      return setup as WarSetup;
+    }
+
+    const { data: existing } = await withDbTiming(
+      'GET',
+      `war_setups.exists week=${weekStartStr}`,
+      () =>
+        supabase
+          .from('war_setups')
+          .select('id')
+          .eq('week_start', weekStartStr)
+          .eq('type', 'war')
+          .maybeSingle()
+    );
+
+    if (existing) { await fetchSetup(); return; }
+
+    const { data: setup, error: err } = await withDbTiming(
+      'POST',
+      `war_setups.create week=${weekStartStr}`,
+      () =>
+        supabase
+          .from('war_setups')
+          .insert({ week_start: weekStartStr, type: 'war', created_by: createdBy })
+          .select()
+          .single()
+    );
+
+    if (err) { setError(err.message); return; }
+
+    const setupId = (setup as WarSetup).id;
+    await createDefaultGroups(setupId);
     await fetchSetup();
     return setup as WarSetup;
   };
@@ -524,7 +579,7 @@ export function useWarSetup(weekStart?: Date) {
     if (err) {
       console.error('[useWarSetup] updatePartyIcon:', err);
     } else if (updatedData) {
-      writeCache(weekStartStr, updatedData);
+      writeCache(weekStartStr, updatedData, setupType, eventId);
     }
   };
 

@@ -139,11 +139,23 @@ for each row execute procedure public.attendance_set_set_by();
 -- ─────────────────────────────────────────────────────────────────────────────
 create table if not exists public.war_setups (
   id          uuid primary key default gen_random_uuid(),
-  week_start  date not null unique,
+  week_start  date not null,
+  type        text not null default 'war'
+                check (type in ('war', 'training')),
+  event_id    uuid references public.guild_events(id) on delete set null,
   created_by  uuid not null references public.profiles(id),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+-- Partial unique: only one war setup per week for the main war
+-- Training setups are linked to event_id instead
+create unique index if not exists idx_war_setups_week_war
+  on public.war_setups (week_start) where type = 'war';
+
+-- Training setups can only have one per event
+create unique index if not exists idx_war_setups_event_training
+  on public.war_setups (event_id) where type = 'training' and event_id is not null;
 
 alter table public.war_setups enable row level security;
 
@@ -755,6 +767,8 @@ create table if not exists public.guild_events (
   start_time  text,                   -- "HH:MM" 24-hr format, nullable
   color       text not null default 'indigo'
                 check (color in ('indigo','amber','rose','emerald','sky')),
+  event_type  text not null default 'war'
+                check (event_type in ('war', 'training')),
   created_by  uuid not null references public.profiles(id) on delete cascade,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
@@ -785,6 +799,82 @@ create policy "guild_events_delete_mgmt"
   on public.guild_events for delete using (
     exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TRAINING ATTENDANCE
+--    Each member records their status for a specific training event.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.training_attendance (
+  id          uuid primary key default gen_random_uuid(),
+  event_id    uuid not null references public.guild_events(id) on delete cascade,
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  status      text not null check (status in ('join', 'not_join', 'maybe')),
+  set_by      uuid references public.profiles(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  unique (event_id, user_id)
+);
+
+alter table public.training_attendance enable row level security;
+
+-- Anyone authenticated can read training attendance
+drop policy if exists "training_attendance_select_auth" on public.training_attendance;
+create policy "training_attendance_select_auth"
+  on public.training_attendance for select using ((select auth.role()) = 'authenticated');
+
+drop policy if exists "training_attendance_insert_auth" on public.training_attendance;
+create policy "training_attendance_insert_auth"
+  on public.training_attendance for insert with check (
+    (select auth.role()) = 'authenticated'
+  );
+
+drop policy if exists "training_attendance_update_auth" on public.training_attendance;
+create policy "training_attendance_update_auth"
+  on public.training_attendance for update using (
+    (select auth.role()) = 'authenticated'
+  );
+
+drop policy if exists "training_attendance_delete_own" on public.training_attendance;
+create policy "training_attendance_delete_own"
+  on public.training_attendance for delete using ((select auth.uid()) = user_id);
+
+-- Indexes
+create index if not exists idx_training_attendance_event
+  on public.training_attendance (event_id, created_at);
+create index if not exists idx_training_attendance_user_event
+  on public.training_attendance (user_id, event_id);
+
+-- Trigger to set `set_by` when a row is inserted/updated by someone other than the target user
+drop function if exists public.training_attendance_set_set_by();
+create or replace function public.training_attendance_set_set_by()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    new.set_by := null;
+    return new;
+  end if;
+
+  if new.user_id IS DISTINCT FROM (select auth.uid()) then
+    new.set_by := (select auth.uid());
+  else
+    new.set_by := null;
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+revoke execute on function public.training_attendance_set_set_by() from public;
+
+drop trigger if exists training_attendance_set_by_trigger on public.training_attendance;
+create trigger training_attendance_set_by_trigger
+before insert or update on public.training_attendance
+for each row execute procedure public.training_attendance_set_set_by();
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- GUILD LEAGUE STRATEGIC MAP BOARD TABLES
@@ -1190,4 +1280,21 @@ insert into public.titles (name, description, icon_emoji, is_auto, rule_trigger)
   ('Centurion', '100% attendance for a full season', '🏛️', true, 'attendance_100'),
   ('MVP', 'Awarded by officers for outstanding performance', '🌟', false, NULL)
 on conflict (name) do nothing;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ADDITIVE MIGRATIONS: TRAINING SYSTEM
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Training event type on guild_events
+alter table public.guild_events add column if not exists event_type text not null default 'war' check (event_type in ('war', 'training'));
+
+-- Training setup type + event link on war_setups
+alter table public.war_setups add column if not exists type text not null default 'war' check (type in ('war', 'training'));
+alter table public.war_setups add column if not exists event_id uuid references public.guild_events(id) on delete set null;
+
+-- Partial unique indexes for war_setups (ignore duplicates from migration)
+create unique index if not exists idx_war_setups_week_war
+  on public.war_setups (week_start) where type = 'war';
+create unique index if not exists idx_war_setups_event_training
+  on public.war_setups (event_id) where type = 'training' and event_id is not null;
 

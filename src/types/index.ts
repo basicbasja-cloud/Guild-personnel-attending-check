@@ -35,6 +35,8 @@ export interface Attendance {
 export interface WarSetup {
   id: string;
   week_start: string;
+  type: string;
+  event_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -83,6 +85,18 @@ export interface GroupData {
   }[];
 }
 
+export interface TrainingAttendance {
+  id: string;
+  event_id: string;
+  user_id: string;
+  status: AttendanceStatus;
+  created_at: string;
+  updated_at: string;
+  set_by?: string | null;
+  set_by_profile?: Profile | null;
+  profile?: Profile;
+}
+
 export const MAX_ACTIVE_MEMBERS = 60;
 export const MAX_SUBSTITUTE_MEMBERS = 20;
 export const MAX_MEMBERS_PER_PARTY = 6;
@@ -100,6 +114,8 @@ export interface ProfileSkill {
 }
 
 export type GuildEventColor = 'indigo' | 'amber' | 'rose' | 'emerald' | 'sky';
+/** Any string: 'war', 'training', 'internal_event', etc. */
+export type EventType = string;
 
 export interface GuildEvent {
   id: string;
@@ -108,6 +124,7 @@ export interface GuildEvent {
   event_date: string | null; // ISO date 'YYYY-MM-DD', null = unscheduled
   start_time: string | null; // 'HH:MM' 24-hr
   color: GuildEventColor;
+  event_type: EventType;
   created_by: string;
   created_at: string;
   updated_at: string;

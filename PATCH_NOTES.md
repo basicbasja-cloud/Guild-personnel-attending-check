@@ -1,3 +1,32 @@
+# Patch Notes — June 12, 2026
+
+---
+
+## For Guild Members & Officers
+
+### New Features
+
+- **🏋️ Training System** — A complete training event management system alongside the main war system:
+  - **📅 Training Events** — Calendar now supports any event type (War, Training, Internal Event, etc.) via a flexible event type selector with presets + custom input
+  - **📋 Training Attendance** — When a manager creates a training event, members can respond **Join ✅ / Can't Join ❌ / Maybe 🤔** just like war attendance. Opens in a dedicated modal from the calendar.
+  - **⚔️ Training War Setup** — Training events have their own full-page war setup builder identical to the main war setup: drag-and-drop party builder, class distribution, available members (join/maybe), non-responded sidebar, substitutes board.
+  - **🔔 Auto-Notifications** — Creating a training event auto-posts an announcement and shows a floating toast notification to all online managers.
+  - **📊 Dashboard Summary** — Dashboard now has 3 tabs: **📊 Summary** (combined war×0.7 + training×0.3 active score), **⚔️ War** (individual), **🏋️ Training** (individual).
+  - **🎯 Active Score** — A weighted score combining war attendance (70%) and training attendance (30%), shown in the Summary tab with visual progress bars.
+
+### For Technical People
+
+- 6 new files: `useTrainingAttendance.ts`, `useTrainingNotification.ts`, `TrainingAttendanceModal.tsx`, `TrainingSetupModal.tsx`, `FloatingNotification.tsx`
+- 7 existing files modified: `App.tsx`, `GuildCalendarPage.tsx`, `PlayerStatsDashboard.tsx`, `useGuildEvents.ts`, `useWarSetup.ts`, `types/index.ts`, `schema.sql`
+- New Supabase table: `training_attendance` with full RLS policies, indexes, and set_by trigger
+- `guild_events` — added `event_type` column (flexible text, no CHECK constraint)
+- `war_setups` — added `type` and `event_id` columns with partial unique indexes; dropped old week_start UNIQUE constraint
+- Training war setups reuse the same `war_setups`/`war_groups`/`war_parties`/`war_party_members` tables with `type='training'`
+- Calendar event modal now supports any event type via preset buttons + custom text input
+- Training notifications use Supabase realtime `INSERT` channel on `guild_events` filtered by `event_type='training'`
+
+---
+
 # Patch Notes — June 10, 2026
 
 ---

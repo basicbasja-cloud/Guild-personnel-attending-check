@@ -120,6 +120,19 @@ export function useGuildEvents(): UseGuildEventsReturn {
       setEvents((prev) => { const next = prev.filter((e) => e.id !== tempId); writeCache(next); return next; });
     } else {
       const saved = data as GuildEvent;
+      // Auto-create announcement for training events
+      if (saved.event_type === 'training') {
+        const dateStr = saved.event_date
+          ? new Date(saved.event_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+          : '';
+        const timeStr = saved.start_time ? ` at ${saved.start_time}` : '';
+        supabase.from('announcements').insert({
+          title: `🏋️ Training: ${saved.title}`,
+          content: `A new training session has been scheduled${dateStr ? ` on **${dateStr}**` : ''}${timeStr}.\n\nCheck the calendar and set your attendance!`,
+          created_by: saved.created_by,
+          pinned: false,
+        }).then(() => {}, () => {});
+      }
       setEvents((prev) => { const next = prev.map((e) => e.id === tempId ? saved : e); writeCache(next); return next; });
     }
   }, []);

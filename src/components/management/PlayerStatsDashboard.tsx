@@ -8,6 +8,8 @@ import type { Profile } from '../../types';
 
 const HISTORY_WEEKS = 12; // how many weeks back to include
 
+type DashboardTab = 'war' | 'training' | 'summary';
+
 interface WeekRow {
   user_id: string;
   status: 'join' | 'not_join' | 'maybe';
@@ -23,9 +25,13 @@ interface PlayerStat {
   attendance_rate: number; // (join + maybe) / total
   main_skill: string;
   sub_skill: string;
+  /** Summary-only: weighted active score (war 0.7 + training 0.3) */
+  active_score?: number;
+  war_rate?: number;
+  training_rate?: number;
 }
 
-type SortKey = 'username' | 'join' | 'maybe' | 'not_join' | 'non_select' | 'attendance_rate' | 'main_skill' | 'sub_skill';
+type SortKey = 'username' | 'join' | 'maybe' | 'not_join' | 'non_select' | 'attendance_rate' | 'active_score' | 'main_skill' | 'sub_skill';
 
 function buildWeekStrs(count: number): string[] {
   const today = new Date();
@@ -35,14 +41,14 @@ function buildWeekStrs(count: number): string[] {
   });
 }
 
-export function PlayerStatsDashboard() {
-  const { profiles } = useAllProfiles();
+function useAttendanceStats(): {
+  rows: WeekRow[];
+  weeks: string[];
+  loading: boolean;
+} {
   const [rows, setRows] = useState<WeekRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [weeks] = useState<string[]>(() => buildWeekStrs(HISTORY_WEEKS));
-  const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('join');
-  const [sortDesc, setSortDesc] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,28 +65,131 @@ export function PlayerStatsDashboard() {
     return () => { cancelled = true; };
   }, [weeks]);
 
-  const stats = useMemo((): PlayerStat[] => {
-    const statusByUser = new Map<string, { join: number; maybe: number; not_join: number }>();
-    for (const r of rows) {
-      const s = statusByUser.get(r.user_id) ?? { join: 0, maybe: 0, not_join: 0 };
+  return { rows, weeks, loading };
+}
+
+function useTrainingStats(): {
+  rows: { user_id: string; status: string }[];
+  loading: boolean;
+  eventCount: number;
+} {
+  const [rows, setRows] = useState<{ user_id: string; status: string }[]>([]);
+  const [eventCount, setEventCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    // Get all training events first
+    supabase
+      .from('guild_events')
+      .select('id')
+      .eq('event_type', 'training')
+      .then(({ data: events }) => {
+        if (cancelled) return;
+        const eventIds = (events ?? []).map((e: { id: string }) => e.id);
+        setEventCount(eventIds.length);
+
+        if (eventIds.length === 0) {
+          setRows([]);
+          setLoading(false);
+          return;
+        }
+
+        // Then get all training attendance for those events
+        supabase
+          .from('training_attendance')
+          .select('user_id,status')
+          .in('event_id', eventIds)
+          .then(({ data }) => {
+            if (cancelled) return;
+            setRows((data as { user_id: string; status: string }[]) ?? []);
+            setLoading(false);
+          }, () => { if (!cancelled) setLoading(false); });
+      }, () => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { rows, loading, eventCount };
+}
+
+function buildStats(profiles: Profile[], rows: { user_id: string; status: string }[], totalCount: number): PlayerStat[] {
+  const statusByUser = new Map<string, { join: number; maybe: number; not_join: number }>();
+  for (const r of rows) {
+    const s = statusByUser.get(r.user_id) ?? { join: 0, maybe: 0, not_join: 0 };
+    if (r.status === 'join' || r.status === 'not_join' || r.status === 'maybe') {
       s[r.status]++;
-      statusByUser.set(r.user_id, s);
     }
-    return profiles.map((p) => {
-      const s = statusByUser.get(p.id) ?? { join: 0, maybe: 0, not_join: 0 };
-      const responded = s.join + s.maybe + s.not_join;
-      const non_select = Math.max(0, HISTORY_WEEKS - responded);
-      const total = HISTORY_WEEKS;
-      const attendance_rate = total > 0 ? Math.round(((s.join + s.maybe) / total) * 100) : 0;
-      const main_skill = p.main_skill_name
-        ? `${p.main_skill_name}${p.main_skill_level != null ? ` Lv.${p.main_skill_level}` : ''}`
-        : '';
-      const sub_skill = p.sub_skill_name
-        ? `${p.sub_skill_name}${p.sub_skill_level != null ? ` Lv.${p.sub_skill_level}` : ''}`
-        : '';
-      return { profile: p, join: s.join, maybe: s.maybe, not_join: s.not_join, non_select, total, attendance_rate, main_skill, sub_skill };
-    });
-  }, [profiles, rows]);
+    statusByUser.set(r.user_id, s);
+  }
+  return profiles.map((p) => {
+    const s = statusByUser.get(p.id) ?? { join: 0, maybe: 0, not_join: 0 };
+    const responded = s.join + s.maybe + s.not_join;
+    const non_select = Math.max(0, totalCount - responded);
+    const attendance_rate = totalCount > 0 ? Math.round(((s.join + s.maybe) / totalCount) * 100) : 0;
+    const main_skill = p.main_skill_name
+      ? `${p.main_skill_name}${p.main_skill_level != null ? ` Lv.${p.main_skill_level}` : ''}`
+      : '';
+    const sub_skill = p.sub_skill_name
+      ? `${p.sub_skill_name}${p.sub_skill_level != null ? ` Lv.${p.sub_skill_level}` : ''}`
+      : '';
+    return { profile: p, join: s.join, maybe: s.maybe, not_join: s.not_join, non_select, total: totalCount, attendance_rate, main_skill, sub_skill };
+  });
+}
+
+export function PlayerStatsDashboard() {
+  const { profiles } = useAllProfiles();
+  const [tab, setTab] = useState<DashboardTab>('summary');
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('active_score');
+  const [sortDesc, setSortDesc] = useState(true);
+
+  const warStats = useAttendanceStats();
+  const trainingStats = useTrainingStats();
+
+  const warStatList = useMemo(
+    () => buildStats(profiles, warStats.rows, HISTORY_WEEKS),
+    [profiles, warStats.rows]
+  );
+  const trainingStatList = useMemo(
+    () => buildStats(profiles, trainingStats.rows, Math.max(trainingStats.eventCount, 1)),
+    [profiles, trainingStats.rows, trainingStats.eventCount]
+  );
+
+  const stats = useMemo(() => {
+    if (tab === 'summary') {
+      // Combine war + training into a single summary with weighted active score
+      const warMap = new Map(warStatList.map((s) => [s.profile.id, s]));
+      const trainingMap = new Map(trainingStatList.map((s) => [s.profile.id, s]));
+      return profiles.map((p) => {
+        const w = warMap.get(p.id);
+        const t = trainingMap.get(p.id);
+        const warRate = w?.attendance_rate ?? 0;
+        const trainingRate = t?.attendance_rate ?? 0;
+        return {
+          profile: p,
+          join: (w?.join ?? 0) + (t?.join ?? 0),
+          maybe: (w?.maybe ?? 0) + (t?.maybe ?? 0),
+          not_join: (w?.not_join ?? 0) + (t?.not_join ?? 0),
+          non_select: (w?.non_select ?? 0) + (t?.non_select ?? 0),
+          total: (w?.total ?? 0) + (t?.total ?? 0),
+          attendance_rate: 0, // not meaningful in combined view
+          main_skill: p.main_skill_name
+            ? `${p.main_skill_name}${p.main_skill_level != null ? ` Lv.${p.main_skill_level}` : ''}`
+            : '',
+          sub_skill: p.sub_skill_name
+            ? `${p.sub_skill_name}${p.sub_skill_level != null ? ` Lv.${p.sub_skill_level}` : ''}`
+            : '',
+          active_score: Math.round(warRate * 0.7 + trainingRate * 0.3),
+          war_rate: warRate,
+          training_rate: trainingRate,
+        };
+      });
+    }
+    return tab === 'war' ? warStatList : trainingStatList;
+  }, [profiles, tab, warStatList, trainingStatList]);
+
+  const loading = tab === 'war' ? warStats.loading : tab === 'training' ? trainingStats.loading : warStats.loading || trainingStats.loading;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -95,8 +204,14 @@ export function PlayerStatsDashboard() {
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const av = sortKey === 'username' ? a.profile.username : sortKey === 'main_skill' || sortKey === 'sub_skill' ? a[sortKey] : a[sortKey];
-      const bv = sortKey === 'username' ? b.profile.username : sortKey === 'main_skill' || sortKey === 'sub_skill' ? b[sortKey] : b[sortKey];
+      const getVal = (s: typeof filtered[number]) => {
+        if (sortKey === 'username') return s.profile.username;
+        if (sortKey === 'main_skill') return s.main_skill;
+        if (sortKey === 'sub_skill') return s.sub_skill;
+        return s[sortKey] ?? 0;
+      };
+      const av = getVal(a);
+      const bv = getVal(b);
       if (av < bv) return sortDesc ? 1 : -1;
       if (av > bv) return sortDesc ? -1 : 1;
       return 0;
@@ -109,21 +224,23 @@ export function PlayerStatsDashboard() {
   };
 
   const handleExport = () => {
+    const baseFields = sorted.map((s) => ({
+      Username: s.profile.username,
+      'Character Name': s.profile.character_name ?? '',
+      Class: s.profile.character_class ?? '',
+      'Main Skill': s.main_skill,
+      'Sub Skill': s.sub_skill,
+      Join: s.join,
+      Maybe: s.maybe,
+      "Can't Join": s.not_join,
+      'Non-Select': s.non_select,
+      ...(tab === 'summary'
+        ? { 'Active Score (war×0.7 + training×0.3)': s.active_score ?? '', 'War Rate': `${s.war_rate ?? 0}%`, 'Training Rate': `${s.training_rate ?? 0}%` }
+        : { 'Attendance Rate (%)': s.attendance_rate, Total: s.total }),
+    }));
     downloadCsv(
-      sorted.map((s) => ({
-        Username: s.profile.username,
-        'Character Name': s.profile.character_name ?? '',
-        Class: s.profile.character_class ?? '',
-        'Main Skill': s.main_skill,
-        'Sub Skill': s.sub_skill,
-        Join: s.join,
-        Maybe: s.maybe,
-        "Can't Join": s.not_join,
-        'Non-Select': s.non_select,
-        'Attendance Rate (%)': s.attendance_rate,
-        [`Weeks (last ${HISTORY_WEEKS})`]: s.total,
-      })),
-      `player_stats_${weeks[0]}.csv`
+      baseFields,
+      `player_stats_${tab}_${new Date().toISOString().slice(0, 10)}.csv`
     );
   };
 
@@ -144,11 +261,47 @@ export function PlayerStatsDashboard() {
       <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
         {/* Header */}
         <div className="px-4 py-4 border-b border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
+          <div className="flex items-center gap-4">
             <h2 className="text-white font-bold text-lg">Player Stats Dashboard</h2>
-            <p className="text-slate-400 text-xs mt-0.5">Last {HISTORY_WEEKS} weeks · {profiles.length} players</p>
+            {/* Sub-tabs */}
+            <div className="flex bg-slate-800 rounded-lg p-0.5">
+              <button
+                onClick={() => setTab('summary')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  tab === 'summary'
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                📊 Summary
+              </button>
+              <button
+                onClick={() => setTab('war')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  tab === 'war'
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ⚔️ War
+              </button>
+              <button
+                onClick={() => setTab('training')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  tab === 'training'
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🏋️ Training
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2">
+            <p className="text-slate-400 text-xs mr-1">
+              {tab === 'summary' ? 'War ×0.7 + Training ×0.3' : tab === 'war' ? `Last ${HISTORY_WEEKS} weeks` : `${trainingStats.eventCount} training events`}
+              · {profiles.length} players
+            </p>
             <input
               type="text"
               value={search}
@@ -176,17 +329,18 @@ export function PlayerStatsDashboard() {
                   <th className="px-3 py-3 text-xs font-semibold text-slate-400 text-left">Class</th>
                   <Th label="⚡ Main Skill" k="main_skill" />
                   <Th label="✦ Sub Skill" k="sub_skill" />
+                  {tab === 'summary' && <Th label="🎯 Active" k="active_score" right />}
                   <Th label="✅ Join" k="join" right />
                   <Th label="🤔 Maybe" k="maybe" right />
                   <Th label="❌ Can't" k="not_join" right />
                   <Th label="❓ Non-Select" k="non_select" right />
-                  <Th label="Rate" k="attendance_rate" right />
+                  {tab !== 'summary' && <Th label="Rate" k="attendance_rate" right />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {sorted.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="text-center text-slate-500 py-10">No players found.</td>
+                    <td colSpan={tab === 'summary' ? 10 : 9} className="text-center text-slate-500 py-10">No players found.</td>
                   </tr>
                 )}
                 {sorted.map((s) => {
@@ -225,6 +379,27 @@ export function PlayerStatsDashboard() {
                           <span className="px-1.5 py-0.5 rounded bg-sky-700/40 text-sky-200 border border-sky-600/30">{s.sub_skill}</span>
                         ) : <span className="text-slate-600">—</span>}
                       </td>
+                      {tab === 'summary' && (
+                        <td className="px-3 py-2.5 text-right">
+                          {s.active_score != null ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <div className="w-12 h-1.5 rounded-full bg-slate-700 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    s.active_score >= 70 ? 'bg-indigo-500' : s.active_score >= 40 ? 'bg-amber-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${s.active_score}%` }}
+                                />
+                              </div>
+                              <span className={`font-semibold w-8 text-right ${
+                                s.active_score >= 70 ? 'text-indigo-400' : s.active_score >= 40 ? 'text-amber-400' : 'text-red-400'
+                              }`}>
+                                {s.active_score}
+                              </span>
+                            </div>
+                          ) : <span className="text-slate-600">—</span>}
+                        </td>
+                      )}
                       <td className="px-3 py-2.5 text-right">
                         <span className="text-emerald-400 font-semibold">{s.join}</span>
                       </td>

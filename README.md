@@ -10,6 +10,15 @@ Hosted on **GitHub Pages** · Backend by **Supabase** · Auth via **Discord OAut
 - 🔐 **Discord OAuth login** — every member uses their unique Discord account
 - 🧪 **Optional Google OAuth login (test only)** — hidden unless explicitly enabled with env flag
 - 📋 **Attendance submission** — members pick **Join / Can't Join / Maybe** for each week
+- 🏋️ **Training System** — separate training event management:
+  - **Training Events** on the calendar with flexible event types (War, Training, Internal Event, etc.)
+  - **Training Attendance** — members respond Join/Can't Join/Maybe per training event
+  - **Training War Setup** — full drag-and-drop party builder for training, identical to main war setup
+  - **Auto-announcements** and **floating toast notifications** when training is scheduled
+- 📊 **Player Stats Dashboard** _(management only)_ — 3 tabs:
+  - **Summary** — combined war (×0.7) + training (×0.3) active score with visual progress bars
+  - **War** — 12-week war attendance history
+  - **Training** — all training event attendance history
 - 👥 **Roster view** — see all responses for the current week, including who set attendance on behalf of others
 - 📢 **Announcements Board** — guild-wide posts by management with pin-to-top and real-time sync; unread count badge on the tab
 - ⚔️ **War setup builder** _(management only)_:
@@ -24,7 +33,6 @@ Hosted on **GitHub Pages** · Backend by **Supabase** · Auth via **Discord OAut
 - 🔥 **Attendance Streaks** — consecutive war attendance tracked with milestone badges (5 = "Hot streak!", 10 = "On fire!", 15 = "Legendary!")
 - 👑 **Title System** — earn titles through attendance milestones (Stalwart, Iron Will, Legendary) or get officer-assigned titles (MVP, custom); active title displays on your member card
 - 🌟 **Member of the Week** — officer-nominated recognition with gold banner on every page
-- 📊 **Player Stats Dashboard** _(management only)_ — 12-week attendance history with export
 - 🔐 **Admin Mode** — PIN-protected account management
 - 🌗 **Light/Dark Theme** — toggle with sun/moon icon in the header; preference saved across sessions
 - 🎨 **Logo color picker** — customize the app logo color; syncs across devices
