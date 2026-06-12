@@ -1262,6 +1262,13 @@ create policy "member_of_week_insert_mgmt"
   with check (
     exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
+drop policy if exists "member_of_week_update_mgmt" on public.member_of_week;
+create policy "member_of_week_update_mgmt"
+  on public.member_of_week for update
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
 drop policy if exists "member_of_week_delete_mgmt" on public.member_of_week;
 create policy "member_of_week_delete_mgmt"
   on public.member_of_week for delete

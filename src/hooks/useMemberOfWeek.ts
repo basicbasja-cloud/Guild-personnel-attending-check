@@ -144,15 +144,23 @@ export function useMemberOfWeek(isManagement: boolean): UseMemberOfWeekResult {
     setCurrent(temp);
 
     try {
-      const { error: err } = await supabase
+      // Delete existing nomination for this week first (RLS has DELETE but no UPDATE policy)
+      const { error: delErr } = await supabase
         .from('member_of_week')
-        .upsert({
+        .delete()
+        .eq('week_start', weekStart);
+      if (delErr) throw delErr;
+
+      // Then insert the new one
+      const { error: insErr } = await supabase
+        .from('member_of_week')
+        .insert({
           user_id: userId,
           week_start: weekStart,
           reason,
-        }, { onConflict: 'week_start' });
+        });
+      if (insErr) throw insErr;
 
-      if (err) throw err;
       await fetchCurrent();
       return true;
     } catch (e: unknown) {
