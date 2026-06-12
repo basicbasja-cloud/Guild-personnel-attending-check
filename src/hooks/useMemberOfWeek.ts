@@ -105,16 +105,17 @@ export function useMemberOfWeek(isManagement: boolean): UseMemberOfWeekResult {
     fetchCurrent();
   }, [fetchCurrent]);
 
-  // Realtime subscription
+  // Realtime subscription — unique channel name per instance
   useEffect(() => {
+    const chName = `motw-rt-${Math.random().toString(36).slice(2, 10)}`;
     const channel = supabase
-      .channel('motw-realtime')
+      .channel(chName)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'member_of_week' },
         () => { fetchCurrent(); },
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { channel.unsubscribe().finally(() => supabase.removeChannel(channel)); };
   }, [fetchCurrent]);
 
   const nominate = useCallback(async (userId: string, reason: string): Promise<boolean> => {
