@@ -12,18 +12,6 @@ We now have a full training management system alongside the main war system:
 
 ---
 
-## 📊 Dashboard Summary Tab
-
-The Dashboard now has a **Summary** tab that combines your war and training attendance into one **Active Score**:
-
-- **War attendance** counts for **70%** of your score
-- **Training attendance** counts for **30%** of your score
-- The higher your Active Score, the better! Shows as a progress bar.
-
-You can still view War and Training stats separately by switching tabs.
-
----
-
 ## 🎯 KPI Score Tiers Adjusted
 
 The rank thresholds for the animated battle scene in KPI Stats have been rebalanced:

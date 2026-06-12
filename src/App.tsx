@@ -21,7 +21,7 @@ import { preloadKpiProfile } from './hooks/useKpiProfile';
 import { preloadProfiles } from './hooks/useAllProfiles';
 import { preloadAttendance } from './hooks/useAttendance';
 import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
-import { preloadGuildEvents } from './hooks/useGuildEvents';
+import { preloadGuildEvents, useGuildEvents } from './hooks/useGuildEvents';
 import { useTrainingNotification } from './hooks/useTrainingNotification';
 import { FloatingNotification } from './components/ui/FloatingNotification';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
@@ -40,6 +40,9 @@ function AppContent() {
   const { notification: trainingNotif, dismissed: trainingNotifDismissed, dismiss: dismissTrainingNotif } =
     useTrainingNotification(auth.profile?.id ?? '');
 
+  // ── Guild events (for training badge on calendar tab) ──────────────
+  const { events: guildEvents } = useGuildEvents();
+
   // ── Notification badges ────────────────────────────────────────────
   const [announcementIds, setAnnouncementIds] = useState<string[]>([]);
   const badgeUnread = useMemo(() => {
@@ -49,6 +52,11 @@ function AppContent() {
     const idx = announcementIds.indexOf(lastRead);
     return idx > 0 ? idx : 0;
   }, [announcementIds]);
+
+  const trainingBadgeCount = useMemo(
+    () => guildEvents.filter((e) => e.event_type === 'training' && Date.now() - new Date(e.created_at).getTime() < 86400000).length,
+    [guildEvents]
+  );
 
   // Flat list of all parties with full member data (for League Board).
   // Preserve the last non-empty list so the board never briefly shows empty
@@ -145,7 +153,9 @@ function AppContent() {
 
   const visibleTabs = tabs.filter((t) => {
     if (!t.mgmtOnly) return true;
-    return auth.profile?.is_management === true;
+    if (t.id === 'admin') return true;
+    if (t.id === 'management') return true;
+    return auth.profile?.is_management;
   });
 
   return (
@@ -184,6 +194,7 @@ function AppContent() {
                 <span className="flex items-center gap-1.5">
                   {t.label}
                   {t.id === 'announcements' && <Badge count={badgeUnread} />}
+                  {t.id === 'calendar' && <Badge count={trainingBadgeCount} pulse />}
                 </span>
               </button>
             ))}
