@@ -98,14 +98,17 @@ export function useGuildEvents(): UseGuildEventsReturn {
     fetchAll();
   }, [fetchAll]);
 
-  // Realtime subscription
+  // Realtime subscription — use unique channel name per hook instance
+  const channelNameRef = useRef(`guild_events_rt_${Math.random().toString(36).slice(2, 10)}`);
   useEffect(() => {
-    channelRef.current = supabase
-      .channel('guild_events_rt')
+    const chName = channelNameRef.current;
+    const channel = supabase
+      .channel(chName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'guild_events' }, () => fetchAll())
       .subscribe();
+    channelRef.current = channel;
     return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      channel.unsubscribe().finally(() => supabase.removeChannel(channel));
     };
   }, [fetchAll]);
 
