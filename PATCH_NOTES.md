@@ -14,6 +14,10 @@
   - **📊 Dashboard Summary** — Dashboard now has 3 tabs: **📊 Summary** (combined war×0.7 + training×0.3 active score), **⚔️ War** (individual), **🏋️ Training** (individual).
   - **🎯 Active Score** — A weighted score combining war attendance (70%) and training attendance (30%), shown in the Summary tab with visual progress bars.
 
+### Bug Fixes
+
+- **MotW Nomination** — Nominating a Member of the Week would silently fail if re-nominating for the same week (the `upsert` tried to UPDATE but no UPDATE RLS policy existed). Fixed by using delete-then-insert pattern and adding the missing UPDATE policy to the schema.
+
 ### For Technical People
 
 - 6 new files: `useTrainingAttendance.ts`, `useTrainingNotification.ts`, `TrainingAttendanceModal.tsx`, `TrainingSetupModal.tsx`, `FloatingNotification.tsx`

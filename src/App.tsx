@@ -145,9 +145,7 @@ function AppContent() {
 
   const visibleTabs = tabs.filter((t) => {
     if (!t.mgmtOnly) return true;
-    if (t.id === 'admin') return true;
-    if (t.id === 'management') return true;
-    return auth.profile?.is_management;
+    return auth.profile?.is_management === true;
   });
 
   return (
