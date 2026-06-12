@@ -21,7 +21,7 @@ const TIERS: ScoreTier[] = [
     sceneBg: 'from-slate-800/60 to-slate-900/60',
   },
   {
-    minScore: 500_000,
+    minScore: 1_500_000,
     emoji: '⚔️',
     title: 'Warrior',
     subtitle: 'Blooded in battle',
@@ -29,7 +29,7 @@ const TIERS: ScoreTier[] = [
     sceneBg: 'from-amber-900/40 to-slate-900/60',
   },
   {
-    minScore: 1_500_000,
+    minScore: 3_000_000,
     emoji: '🛡️',
     title: 'Knight',
     subtitle: 'Armored and unwavering',
@@ -37,7 +37,7 @@ const TIERS: ScoreTier[] = [
     sceneBg: 'from-cyan-900/40 to-slate-900/60',
   },
   {
-    minScore: 3_500_000,
+    minScore: 5_000_000,
     emoji: '🐉',
     title: 'Dragon Slayer',
     subtitle: 'Fear of no beast',
@@ -45,7 +45,7 @@ const TIERS: ScoreTier[] = [
     sceneBg: 'from-violet-900/50 to-slate-900/60',
   },
   {
-    minScore: 6_000_000,
+    minScore: 7_000_000,
     emoji: '👑',
     title: 'Demon King',
     subtitle: 'You slay the demon lord',

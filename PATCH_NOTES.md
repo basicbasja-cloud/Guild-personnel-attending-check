@@ -44,11 +44,11 @@
 - **Title System 👑** — Earn titles through attendance milestones or get assigned by officers. Titles display on your member card in War Setup. You can choose which earned title to show from your Profile page. Built-in titles: Stalwart (🔥 5-week streak), Iron Will (⚡ 10-week), Legendary (💀 15-week), Centurion (🏛️ 100% attendance), and MVP (🌟 officer-awarded).
 
 - **KPI Score Tier Animation 🗡️→👑** — The Your Performance section in KPI Stats now shows your score as an animated battle scene that progresses through ranks:
-  - 🗡️ **Recruit** — Soldier trains on a dummy (score 0–500K)
-  - ⚔️ **Warrior** — Two warriors clash on the battlefield (500K–1.5M)
-  - 🛡️ **Knight** — Shielded defender stands guard (1.5M–3.5M)
-  - 🐉 **Dragon Slayer** — Hero battles a fire-breathing dragon (3.5M–6M)
-  - 👑 **Demon King** — Crowned victor stands over a defeated demon (6M+)
+  - 🗡️ **Recruit** — Soldier trains on a dummy (score 0–1.5M)
+  - ⚔️ **Warrior** — Two warriors clash on the battlefield (1.5M–3M)
+  - 🛡️ **Knight** — Shielded defender stands guard (3M–5M)
+  - 🐉 **Dragon Slayer** — Hero battles a fire-breathing dragon (5M–7M)
+  - 👑 **Demon King** — Crowned victor stands over a defeated demon (7M+)
   
   Each scene has floating emoji, particle effects, and colored glow. A "RANK UP!" burst fires when you advance to the next tier.
 
