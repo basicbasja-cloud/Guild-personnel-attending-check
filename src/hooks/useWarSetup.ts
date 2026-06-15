@@ -291,7 +291,7 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
     }
 
     const channel = supabase
-      .channel(`war-${setupId}-${Date.now()}`)
+      .channel(`war-${setupId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'war_party_members', filter: `war_setup_id=eq.${setupId}` }, () => void handleChange())
       .subscribe((status) => syncEngine.setLive(status === 'SUBSCRIBED'));
 

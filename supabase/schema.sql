@@ -1305,3 +1305,147 @@ create unique index if not exists idx_war_setups_week_war
 create unique index if not exists idx_war_setups_event_training
   on public.war_setups (event_id) where type = 'training' and event_id is not null;
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION: perf_fix_unindexed_fks_and_rls (2026-06-15)
+-- 1. Add missing FK indexes (speeds up JOIN queries)
+-- 2. Fix auth RLS initplan (wrap auth.*() in subselects)
+-- 3. Remove duplicate RLS policy on admin_pin_attempts
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- 1. MISSING FK INDEXES
+create index if not exists idx_announcements_created_by
+  on public.announcements (created_by);
+create index if not exists idx_guild_events_created_by
+  on public.guild_events (created_by);
+create index if not exists idx_league_arrows_from_party_id
+  on public.league_arrows (from_party_id);
+create index if not exists idx_league_arrows_to_party_id
+  on public.league_arrows (to_party_id);
+create index if not exists idx_league_plans_season_id
+  on public.league_plans (season_id);
+create index if not exists idx_league_zone_assignments_party_id
+  on public.league_zone_assignments (party_id);
+create index if not exists idx_member_of_week_nominated_by
+  on public.member_of_week (nominated_by);
+create index if not exists idx_member_of_week_user_id
+  on public.member_of_week (user_id);
+create index if not exists idx_training_attendance_set_by
+  on public.training_attendance (set_by);
+create index if not exists idx_user_titles_title_id
+  on public.user_titles (title_id);
+
+-- 2. AUTH RLS INITPLAN FIX
+-- Wrap auth.<function>() in (select auth.<function>()) so Postgres
+-- evaluates them once per query (initplan) instead of per row.
+drop policy if exists "auth read league_drawings" on public.league_drawings;
+create policy "auth read league_drawings"
+  on public.league_drawings for select
+  using ((select auth.role()) = 'authenticated');
+
+drop policy if exists "management write league_drawings" on public.league_drawings;
+create policy "management write league_drawings"
+  on public.league_drawings for all
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and is_management = true
+    )
+  );
+
+drop policy if exists "kpi_entries_write_super_manager" on public.kpi_weekly_entries;
+create policy "kpi_entries_write_super_manager"
+  on public.kpi_weekly_entries for all
+  to authenticated
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and is_super_manager = true
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and is_super_manager = true
+    )
+  );
+
+-- 3. REMOVE DUPLICATE RLS POLICY
+drop policy if exists "admin_pin_attempts_deny" on public.admin_pin_attempts;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION: revoke_anon_execute_on_security_definer (2026-06-15)
+-- Revoke EXECUTE from anon (public) for all SECURITY DEFINER functions.
+-- Safe: called via supabase.rpc() with user session tokens.
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- KPI scoring & query functions
+revoke execute on function public.compute_kpi_scores(date) from public;
+grant   execute on function public.compute_kpi_scores(date) to authenticated;
+
+revoke execute on function public.get_kpi_entries_with_profiles(date) from public;
+grant   execute on function public.get_kpi_entries_with_profiles(date) to authenticated;
+
+revoke execute on function public.get_kpi_entry_for_editor(uuid, date) from public;
+grant   execute on function public.get_kpi_entry_for_editor(uuid, date) to authenticated;
+
+revoke execute on function public.get_kpi_private_scores(date) from public;
+grant   execute on function public.get_kpi_private_scores(date) to authenticated;
+
+revoke execute on function public.get_kpi_profile(uuid, integer) from public;
+grant   execute on function public.get_kpi_profile(uuid, integer) to authenticated;
+
+revoke execute on function public.get_kpi_public_board(date) from public;
+grant   execute on function public.get_kpi_public_board(date) to authenticated;
+
+revoke execute on function public.kpi_current_is_manager() from public;
+grant   execute on function public.kpi_current_is_manager() to authenticated;
+
+revoke execute on function public.kpi_current_is_super_manager() from public;
+grant   execute on function public.kpi_current_is_super_manager() to authenticated;
+
+-- Upsert KPI entries (bigint overload)
+revoke execute on function public.upsert_kpi_weekly_entry(uuid, date, text, bigint, bigint, bigint, integer, integer, integer, bigint, integer, bigint) from public;
+grant   execute on function public.upsert_kpi_weekly_entry(uuid, date, text, bigint, bigint, bigint, integer, integer, integer, bigint, integer, bigint) to authenticated;
+
+-- Upsert KPI entries (numeric overload)
+revoke execute on function public.upsert_kpi_weekly_entry(uuid, date, text, numeric, numeric, numeric, integer, integer, integer, numeric, integer, numeric, integer, integer) from public;
+grant   execute on function public.upsert_kpi_weekly_entry(uuid, date, text, numeric, numeric, numeric, integer, integer, integer, numeric, integer, numeric, integer, integer) to authenticated;
+
+-- Mini-game score upsert
+revoke execute on function public.upsert_mini_game_score(uuid, text, text, integer) from public;
+grant   execute on function public.upsert_mini_game_score(uuid, text, text, integer) to authenticated;
+
+-- Admin functions (re-apply grants to be safe)
+revoke execute on function public.verify_admin_pin(text) from public;
+grant   execute on function public.verify_admin_pin(text) to authenticated;
+
+revoke execute on function public.set_management_level_with_pin(uuid, text, text) from public;
+grant   execute on function public.set_management_level_with_pin(uuid, text, text) to authenticated;
+
+revoke execute on function public.add_class_with_pin(text, text, text) from public;
+grant   execute on function public.add_class_with_pin(text, text, text) to authenticated;
+
+revoke execute on function public.delete_user_with_pin(uuid, text) from public;
+grant   execute on function public.delete_user_with_pin(uuid, text) to authenticated;
+
+revoke execute on function public.change_admin_pin(text, text) from public;
+grant   execute on function public.change_admin_pin(text, text) to authenticated;
+
+-- Trigger functions -- must NOT be callable via REST API
+revoke execute on function public.attendance_set_set_by() from public;
+revoke execute on function public.training_attendance_set_set_by() from public;
+revoke execute on function public.handle_new_user_profile() from public;
+
+-- Also explicitly revoke from anon role (Supabase-specific: revoke from public
+-- alone may not fully block the anon role due to explicit grants)
+revoke execute on function public.compute_kpi_scores(date) from anon;
+revoke execute on function public.get_kpi_entries_with_profiles(date) from anon;
+revoke execute on function public.get_kpi_entry_for_editor(uuid, date) from anon;
+revoke execute on function public.get_kpi_private_scores(date) from anon;
+revoke execute on function public.get_kpi_profile(uuid, integer) from anon;
+revoke execute on function public.get_kpi_public_board(date) from anon;
+revoke execute on function public.training_attendance_set_set_by() from anon;
+revoke execute on function public.upsert_kpi_weekly_entry(uuid, date, text, bigint, bigint, bigint, integer, integer, integer, bigint, integer, bigint) from anon;
+revoke execute on function public.upsert_kpi_weekly_entry(uuid, date, text, numeric, numeric, numeric, integer, integer, integer, numeric, integer, numeric, integer, integer) from anon;
+revoke execute on function public.verify_admin_pin(text) from anon;
+
