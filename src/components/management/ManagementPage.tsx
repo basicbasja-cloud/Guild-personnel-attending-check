@@ -538,6 +538,7 @@ function AvailablePanel({ members, maybeUserIds, canEdit }: { members: Profile[]
         ) : (
           members.map((profile) => (
             <MemberCard
+              key={profile.id}
               id={`available::${profile.id}`}
               profile={profile}
               origin={{ type: 'available' }}

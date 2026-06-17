@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/auth/LoginPage';
 import { Header } from './components/layout/Header';
@@ -45,6 +45,14 @@ function AppContent() {
 
   // ── Notification badges ────────────────────────────────────────────
   const [announcementIds, setAnnouncementIds] = useState<string[]>([]);
+
+  const handleAnnouncementsLoaded = useCallback((ids: string[]) => {
+    setAnnouncementIds(ids);
+  }, []);
+
+  const handleTabOpened = useCallback(() => {
+    try { localStorage.setItem('gwm_last_read_announcement', announcementIds[0] ?? ''); } catch {}
+  }, [announcementIds]);
   const badgeUnread = useMemo(() => {
     if (announcementIds.length === 0) return 0;
     const lastRead = (() => { try { return localStorage.getItem('gwm_last_read_announcement'); } catch { return null; } })();
@@ -211,10 +219,8 @@ function AppContent() {
             <AnnouncementsPage
               isManagement={auth.profile.is_management}
               userId={auth.profile.id}
-              onAnnouncementsLoaded={(ids) => setAnnouncementIds(ids)}
-              onTabOpened={() => {
-                try { localStorage.setItem('gwm_last_read_announcement', announcementIds[0] ?? ''); } catch {}
-              }}
+              onAnnouncementsLoaded={handleAnnouncementsLoaded}
+              onTabOpened={handleTabOpened}
             />
           )}
           {tab === 'management' && (
