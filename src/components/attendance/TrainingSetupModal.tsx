@@ -387,7 +387,14 @@ export function TrainingSetupModal({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {availableProfiles.map((p) => (
-                      <MemberCard key={p.id} id={p.id} profile={p} origin={{ type: 'available' }} />
+                      <MemberCard
+                        key={p.id}
+                        id={p.id}
+                        profile={p}
+                        origin={{ type: 'available' }}
+                        isMaybe={maybeUserIds.has(p.id)}
+                        disabled={!canEdit}
+                      />
                     ))}
                     {availableProfiles.length === 0 && (
                       <p className="text-slate-500 text-xs py-2">All join/maybe members are assigned.</p>
