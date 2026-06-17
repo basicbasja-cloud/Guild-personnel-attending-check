@@ -632,6 +632,12 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
             setTrainingAttModalOpen(false);
             setTrainingSetupModalOpen(true);
           }}
+          onEditEvent={() => {
+            setTrainingAttModalOpen(false);
+            setEditingEvent(trainingEvent);
+            setCreateDate(null);
+            setModalOpen(true);
+          }}
         />
       )}
     </DndContext>

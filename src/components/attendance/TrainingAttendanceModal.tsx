@@ -180,6 +180,7 @@ interface TrainingAttendanceModalProps {
   isManagement: boolean;
   onClose: () => void;
   onManageSetup?: () => void;
+  onEditEvent?: () => void;
 }
 
 export function TrainingAttendanceModal({
@@ -188,6 +189,7 @@ export function TrainingAttendanceModal({
   isManagement,
   onClose,
   onManageSetup,
+  onEditEvent,
 }: TrainingAttendanceModalProps) {
   const { attendance, eventAttendances, submitting, error, setStatus, loading } = useTrainingAttendance(
     event.id,
@@ -233,7 +235,17 @@ export function TrainingAttendanceModal({
             <h2 className="font-bold text-white text-lg flex items-center gap-2">
               🏋️ {event.title}
             </h2>
-            <button onClick={onClose} className="text-slate-500 hover:text-slate-200 text-xl leading-none">✕</button>
+            <div className="flex items-center gap-2">
+              {isManagement && onEditEvent && (
+                <button
+                  onClick={onEditEvent}
+                  className="text-xs px-2.5 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-white font-semibold transition-colors"
+                >
+                  ✏️ Edit
+                </button>
+              )}
+              <button onClick={onClose} className="text-slate-500 hover:text-slate-200 text-xl leading-none">✕</button>
+            </div>
           </div>
           <p className="text-slate-400 text-sm">
             Training · {eventDate}{event.start_time ? ` at ${event.start_time}` : ''}
