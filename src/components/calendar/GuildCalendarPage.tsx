@@ -450,18 +450,18 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
   }, []);
 
   const openEdit = useCallback((ev: GuildEvent) => {
-    if (ev.event_type === 'training' && isManagement) {
-      // Training events: open attendance + war setup view
+    setEditingEvent(ev);
+    setCreateDate(null);
+    setModalOpen(true);
+  }, []);
+
+  const handleEventClick = useCallback((ev: GuildEvent) => {
+    if (ev.event_type === 'training') {
+      // Training events: open attendance modal for ALL users
       setTrainingEvent(ev);
       setTrainingAttModalOpen(true);
       return;
     }
-    setEditingEvent(ev);
-    setCreateDate(null);
-    setModalOpen(true);
-  }, [isManagement]);
-
-  const handleEventClick = useCallback((ev: GuildEvent) => {
     if (isManagement) {
       openEdit(ev);
     } else {
