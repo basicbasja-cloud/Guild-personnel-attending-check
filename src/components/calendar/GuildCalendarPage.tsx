@@ -56,9 +56,9 @@ function EventChip({
   const icon = getEventIcon(event.event_type);
   return (
     <div
-      className={`${bg} ${text} rounded px-1.5 py-0.5 text-xs font-medium truncate cursor-pointer select-none
+      className={`${bg} ${text} rounded px-1.5 py-0.5 text-xs font-medium truncate select-none
         ${isDragging ? 'shadow-2xl ring-2 ring-white/40 opacity-90' : 'hover:brightness-110 hover:shadow-md'}
-        ${compact ? 'max-w-[90%]' : 'w-full'} transition-all`}
+        ${compact ? 'max-w-[90%]' : 'w-full'} transition-all ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
       title={`[${event.event_type}] ${event.title}${event.start_time ? ` — ${event.start_time}` : ''}`}
     >
@@ -74,6 +74,80 @@ function DraggableEventChip({ event, onClick }: { event: GuildEvent; onClick: (e
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} style={{ opacity: isDragging ? 0.3 : 1 }}>
       <EventChip event={event} onClick={(e) => { e.stopPropagation(); onClick(event); }} />
+    </div>
+  );
+}
+
+// ─── Read-only Event Detail Modal (non-management) ──────────────────────────
+function EventDetailModal({
+  event,
+  onClose,
+}: {
+  event: GuildEvent;
+  onClose: () => void;
+}) {
+  const { bg, text } = COLOR_MAP[event.color] ?? COLOR_MAP.indigo;
+  const icon = getEventIcon(event.event_type);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Color header bar */}
+        <div className={`h-2 ${bg}`} />
+
+        <div className="px-5 pt-4 pb-5">
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-2xl">{icon}</span>
+              <h2 className="font-bold text-white text-lg truncate">{event.title}</h2>
+            </div>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-200 text-xl leading-none shrink-0">✕</button>
+          </div>
+
+          {/* Event type badge */}
+          <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${bg} ${text} mb-4`}>
+            {icon} {event.event_type.replace(/_/g, ' ')}
+          </div>
+
+          {/* Details */}
+          <div className="space-y-3">
+            {event.event_date && (
+              <div>
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-0.5">Date</label>
+                <p className="text-sm text-white">{format(new Date(event.event_date + 'T00:00:00'), 'EEEE, MMMM d, yyyy')}</p>
+              </div>
+            )}
+            {event.start_time && (
+              <div>
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-0.5">Time</label>
+                <p className="text-sm text-white">{event.start_time}</p>
+              </div>
+            )}
+            {event.description && (
+              <div>
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-0.5">Description</label>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap">{event.description}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Close button */}
+          <div className="mt-6 flex justify-end">
+            <button onClick={onClose}
+              className="px-4 py-1.5 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 transition-colors">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -95,10 +169,10 @@ function DroppableDayCell({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={isManagement ? setNodeRef : undefined}
       className={`min-h-20 p-1 border border-slate-700/50 flex flex-col transition-colors
         ${isCurrentMonth ? 'bg-slate-800/40' : 'bg-slate-900/60 opacity-50'}
-        ${isOver ? 'bg-indigo-900/30 ring-1 ring-inset ring-indigo-500' : ''}
+        ${isManagement && isOver ? 'bg-indigo-900/30 ring-1 ring-inset ring-indigo-500' : ''}
         ${isToday(date) ? 'ring-1 ring-inset ring-indigo-400' : ''}`}
     >
       {/* Date number */}
@@ -123,9 +197,13 @@ function DroppableDayCell({
       )}
       {/* Events */}
       <div className="space-y-0.5 flex-1 overflow-hidden">
-        {events.map((ev) => (
-          <DraggableEventChip key={ev.id} event={ev} onClick={onEventClick} />
-        ))}
+        {events.map((ev) =>
+          isManagement ? (
+            <DraggableEventChip key={ev.id} event={ev} onClick={onEventClick} />
+          ) : (
+            <EventChip key={ev.id} event={ev} onClick={(e) => { e.stopPropagation(); onEventClick(ev); }} />
+          )
+        )}
       </div>
     </div>
   );
@@ -307,6 +385,7 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [modalOpen, setModalOpen]       = useState(false);
   const [editingEvent, setEditingEvent] = useState<GuildEvent | null>(null);
+  const [detailEvent, setDetailEvent]   = useState<GuildEvent | null>(null);
   const [createDate, setCreateDate]     = useState<string | null>(null);
   const [draggedEvent, setDraggedEvent] = useState<GuildEvent | null>(null);
   const [trainingAttModalOpen, setTrainingAttModalOpen] = useState(false);
@@ -348,6 +427,7 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
   }, []);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    if (!isManagement) return; // non-management cannot move events
     const { active, over } = event;
     setDraggedEvent(null);
     if (!over) return;
@@ -357,12 +437,16 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
     if (!ev) return;
     if (ev.event_date === droppedDate) return;
     updateEventDate(evId, droppedDate);
-  }, [events, updateEventDate]);
+  }, [events, updateEventDate, isManagement]);
 
   const openCreate = useCallback((date?: Date) => {
     setCreateDate(date ? format(date, 'yyyy-MM-dd') : null);
     setEditingEvent(null);
     setModalOpen(true);
+  }, []);
+
+  const openDetail = useCallback((ev: GuildEvent) => {
+    setDetailEvent(ev);
   }, []);
 
   const openEdit = useCallback((ev: GuildEvent) => {
@@ -376,6 +460,14 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
     setCreateDate(null);
     setModalOpen(true);
   }, [isManagement]);
+
+  const handleEventClick = useCallback((ev: GuildEvent) => {
+    if (isManagement) {
+      openEdit(ev);
+    } else {
+      openDetail(ev);
+    }
+  }, [isManagement, openEdit, openDetail]);
 
   const handleSave = useCallback((payload: Omit<GuildEvent, 'id' | 'created_at' | 'updated_at'>) => {
     if (editingEvent) {
@@ -501,7 +593,7 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
                       isManagement={isManagement}
                       events={eventsByDate.get(dateStr) ?? []}
                       onAddClick={openCreate}
-                      onEventClick={openEdit}
+                      onEventClick={handleEventClick}
                     />
                   );
                 })}
@@ -551,6 +643,14 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
           currentUserId={userId}
           isManagement={isManagement}
           onClose={handleTrainingClose}
+        />
+      )}
+
+      {/* Read-only Event Detail Modal (non-management) */}
+      {detailEvent && !isManagement && (
+        <EventDetailModal
+          event={detailEvent}
+          onClose={() => setDetailEvent(null)}
         />
       )}
     </>
