@@ -187,6 +187,9 @@ function AppContent() {
                 key={t.id}
                 onClick={() => {
                   setTab(t.id);
+                  if (t.id === 'calendar') {
+                    dismissTrainingNotif();
+                  }
                   if (t.id === 'announcements') {
                     try { localStorage.setItem('gwm_last_read_announcement', announcementIds[0] ?? ''); } catch {}
                   }
