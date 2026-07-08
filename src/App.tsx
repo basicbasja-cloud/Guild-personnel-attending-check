@@ -152,7 +152,7 @@ function AppContent() {
     { id: 'roster', label: 'Roster', emoji: '👥' },
     { id: 'announcements', label: 'Announcements', emoji: '📢' },
     { id: 'management', label: 'War Setup', emoji: '⚔️', mgmtOnly: true },
-    { id: 'dashboard', label: 'Dashboard', emoji: '📊', mgmtOnly: true },
+    { id: 'dashboard', label: 'Analytics', emoji: '📊', mgmtOnly: true },
     { id: 'league', label: 'League Board', emoji: '🗺️' },
     { id: 'calendar', label: 'Guild Event Schedule', emoji: '📅' },
     { id: 'kpi',   label: 'KPI Stats',  emoji: '🏆' },

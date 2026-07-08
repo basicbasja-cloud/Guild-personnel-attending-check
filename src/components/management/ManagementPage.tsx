@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { format, addWeeks } from 'date-fns';
 import {
   DndContext,
@@ -18,6 +18,7 @@ import { useWarSetup } from '../../hooks/useWarSetup';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
+import { exportElementAsPng } from '../../lib/warExport';
 import type { Profile, WarPartyMember } from '../../types';
 import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
@@ -50,6 +51,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
   const [activeDrag, setActiveDrag] = useState<ActiveDragData | null>(null);
   const [swappingPartyId, setSwappingPartyId] = useState<string | null>(null);
+  const warSetupRef = useRef<HTMLDivElement>(null);
   const [titleManagerOpen, setTitleManagerOpen] = useState(false);
   const [motwOpen, setMotwOpen] = useState(false);
 
@@ -306,6 +308,12 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     downloadCsv(rows, `war_setup_${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}.csv`);
   };
 
+  const handleExportPng = () => {
+    if (warSetupRef.current) {
+      exportElementAsPng(warSetupRef.current, `war_setup_${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}`);
+    }
+  };
+
   const handleRemoveMember = (memberUserId: string) => {
     if (!canEdit) return;
     if (!war.data) return;
@@ -404,13 +412,20 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         )}
 
         {war.data && (
-          <div className="flex justify-end mt-2 mb-4">
+          <div className="flex justify-end gap-2 mt-2 mb-4">
+            <button
+              onClick={handleExportPng}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+              title="Export war setup as PNG image"
+            >
+              🖼️ Export as Image
+            </button>
             <button
               onClick={handleExportWarSetup}
               className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
               title="Export war setup to CSV (opens in Excel)"
             >
-              ⬇ Export War Setup
+              ⬇ Export CSV
             </button>
           </div>
         )}
@@ -445,7 +460,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
             </div>
 
             {/* Right: Groups + Substitutes */}
-            <div className="flex-1 space-y-6 min-w-0">
+            <div ref={warSetupRef} className="flex-1 space-y-6 min-w-0">
               {war.data.groups.map((g) => (
                 <GroupBoard
                   key={g.group.id}

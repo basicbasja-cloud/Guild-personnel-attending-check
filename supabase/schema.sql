@@ -844,6 +844,21 @@ create index if not exists idx_training_attendance_event
 create index if not exists idx_training_attendance_user_event
   on public.training_attendance (user_id, event_id);
 
+-- Enable realtime for this table so the training attendance modal
+-- receives live updates after a status change.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'training_attendance'
+  ) then
+    alter publication supabase_realtime add table only public.training_attendance;
+  end if;
+end
+$$;
+
 -- Trigger to set `set_by` when a row is inserted/updated by someone other than the target user
 drop function if exists public.training_attendance_set_set_by();
 create or replace function public.training_attendance_set_set_by()
@@ -1448,4 +1463,40 @@ revoke execute on function public.training_attendance_set_set_by() from anon;
 revoke execute on function public.upsert_kpi_weekly_entry(uuid, date, text, bigint, bigint, bigint, integer, integer, integer, bigint, integer, bigint) from anon;
 revoke execute on function public.upsert_kpi_weekly_entry(uuid, date, text, numeric, numeric, numeric, integer, integer, integer, numeric, integer, numeric, integer, integer) from anon;
 revoke execute on function public.verify_admin_pin(text) from anon;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION: announcement_reactions (2026-06-17)
+-- Members can react to announcements with emoji.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.announcement_reactions (
+  id              uuid        primary key default gen_random_uuid(),
+  announcement_id uuid        not null references public.announcements(id) on delete cascade,
+  user_id         uuid        not null references public.profiles(id) on delete cascade,
+  emoji           text        not null,
+  created_at      timestamptz not null default now(),
+  unique (announcement_id, user_id, emoji)
+);
+
+alter table public.announcement_reactions enable row level security;
+
+-- Any authenticated user can read reactions
+drop policy if exists "reactions_select_auth" on public.announcement_reactions;
+create policy "reactions_select_auth"
+  on public.announcement_reactions for select
+  using ((select auth.role()) = 'authenticated');
+
+-- Any authenticated user can toggle (insert/delete) their own reactions
+drop policy if exists "reactions_insert_own" on public.announcement_reactions;
+create policy "reactions_insert_own"
+  on public.announcement_reactions for insert
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "reactions_delete_own" on public.announcement_reactions;
+create policy "reactions_delete_own"
+  on public.announcement_reactions for delete
+  using ((select auth.uid()) = user_id);
+
+-- Index for quick lookups
+create index if not exists idx_reactions_announcement
+  on public.announcement_reactions (announcement_id);
 

@@ -219,3 +219,22 @@ export interface KpiEntryInput {
   ally_revives:       number;
   resources_gathered: number;
 }
+
+// ── Announcement Reactions ─────────────────────────────────────────────
+
+export type AnnouncementEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '😡';
+
+export interface AnnouncementReaction {
+  id:              string;
+  announcement_id: string;
+  user_id:         string;
+  emoji:           string;
+  created_at:      string;
+}
+
+/** Aggregated reaction counts per emoji for display */
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  reacted: boolean; // whether the current user has reacted with this emoji
+}

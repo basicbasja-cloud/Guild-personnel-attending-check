@@ -1,0 +1,8 @@
+[functions]
+  [functions.attendance-reminder]
+    verify_jwt = false
+
+[events]
+  cron_jobs = [
+    { schedule = "0 18 * * 4", function = "attendance-reminder" }
+  ]

@@ -1,7 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAnnouncements } from '../../hooks/useAnnouncements';
+import { useAnnouncementReactions } from '../../hooks/useAnnouncementReactions';
 import { AnnouncementEditorModal } from './AnnouncementEditorModal';
+import { ReactionBar } from './ReactionBar';
 import type { Announcement } from '../../hooks/useAnnouncements';
+import type { ReactionSummary } from '../../types';
 
 interface AnnouncementsPageProps {
   isManagement: boolean;
@@ -21,6 +24,7 @@ function formatTime(iso: string): string {
 
 export function AnnouncementsPage({ isManagement, userId, onAnnouncementsLoaded, onTabOpened }: AnnouncementsPageProps) {
   const { announcements, loading, error, create, update, remove } = useAnnouncements(isManagement, userId);
+  const { summaries, toggle: toggleReaction } = useAnnouncementReactions(userId);
 
   // Emit announcement IDs for badge tracking
   useEffect(() => {
@@ -123,6 +127,9 @@ export function AnnouncementsPage({ isManagement, userId, onAnnouncementsLoaded,
             showConfirmDelete={confirmDelete === a.id}
             onConfirmDelete={() => handleDelete(a.id)}
             onCancelDelete={() => setConfirmDelete(null)}
+            reactions={summaries.get(a.id) ?? []}
+            canReact={!!userId}
+            onToggleReaction={(emoji) => toggleReaction(a.id, emoji)}
           />
         ))}
 
@@ -137,6 +144,9 @@ export function AnnouncementsPage({ isManagement, userId, onAnnouncementsLoaded,
             showConfirmDelete={confirmDelete === a.id}
             onConfirmDelete={() => handleDelete(a.id)}
             onCancelDelete={() => setConfirmDelete(null)}
+            reactions={summaries.get(a.id) ?? []}
+            canReact={!!userId}
+            onToggleReaction={(emoji) => toggleReaction(a.id, emoji)}
           />
         ))}
       </div>
@@ -162,6 +172,9 @@ function AnnouncementCard({
   showConfirmDelete,
   onConfirmDelete,
   onCancelDelete,
+  reactions,
+  canReact,
+  onToggleReaction,
 }: {
   announcement: Announcement;
   isManagement: boolean;
@@ -170,6 +183,9 @@ function AnnouncementCard({
   showConfirmDelete: boolean;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
+  reactions: ReactionSummary[];
+  canReact: boolean;
+  onToggleReaction: (emoji: string) => Promise<void>;
 }) {
   return (
     <div
@@ -215,6 +231,14 @@ function AnnouncementCard({
       <p className="text-(--color-text-secondary) text-sm whitespace-pre-wrap mb-3">
         {announcement.content}
       </p>
+
+      {/* Reactions */}
+      <ReactionBar
+        summary={reactions}
+        canReact={canReact}
+        onToggle={onToggleReaction}
+        onAdd={onToggleReaction}
+      />
 
       {/* Meta + Delete confirmation */}
       <div className="flex items-center justify-between">

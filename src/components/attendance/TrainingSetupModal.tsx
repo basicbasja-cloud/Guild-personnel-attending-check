@@ -276,9 +276,25 @@ export function TrainingSetupModal({
               <p className="text-slate-400 text-xs">{eventDate}{event.start_time ? ` at ${event.start_time}` : ''}</p>
             </div>
           </div>
+          {war.data && (
+            <button
+              onClick={() => {
+                const el = document.getElementById('training-setup-content');
+                if (el) {
+                  import('../../lib/warExport').then(({ exportElementAsPng }) =>
+                    exportElementAsPng(el, `training_setup_${event.title.replace(/\s+/g, '_')}`)
+                  );
+                }
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors shrink-0"
+              title="Export setup as PNG image"
+            >
+              🖼️ Export as Image
+            </button>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-screen-2xl mx-auto w-full space-y-4">
+        <div id="training-setup-content" className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-screen-2xl mx-auto w-full space-y-4">
           {/* Stats bar */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-slate-900 rounded-xl border border-emerald-800/50 p-4">

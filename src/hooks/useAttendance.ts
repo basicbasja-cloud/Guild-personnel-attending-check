@@ -28,43 +28,22 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
       () =>
         supabase
           .from('attendance')
-          .select('id,user_id,week_start,status,created_at,updated_at,set_by')
+          .select(`
+            id,user_id,week_start,status,created_at,updated_at,set_by,
+            profile:user_id(id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at),
+            set_by_profile:set_by(id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at)
+          `)
           .eq('week_start', weekStartStr)
           .order('created_at', { ascending: true })
     );
 
     if (baseErr) throw baseErr;
-    const baseRows = (baseData as Attendance[]) ?? [];
-    const userIds = Array.from(new Set(baseRows.map((r) => r.user_id).filter(Boolean)));
-    const setByIds = Array.from(new Set(baseRows.map((r) => (r as any).set_by).filter(Boolean)));
-
-    const allProfileIds = Array.from(new Set([...userIds, ...setByIds]));
-
-    let profileById = new Map<string, Attendance['profile']>();
-    if (allProfileIds.length > 0) {
-      const { data: profilesData, error: profilesErr } = await withDbTiming(
-        'GET',
-        `profiles.byIds count=${allProfileIds.length}`,
-        () =>
-          supabase
-            .from('profiles')
-            .select('id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at')
-            .in('id', allProfileIds)
-      );
-      if (!profilesErr) {
-        profileById = new Map(
-          ((profilesData as Attendance['profile'][] | null) ?? [])
-            .filter((p): p is NonNullable<Attendance['profile']> => !!p?.id)
-            .map((p) => [p.id, p])
-        );
-      }
-    }
-
-    const rows = baseRows.map((r) => ({
+    // Supabase returns joined FK data as arrays; normalize to nullable objects.
+    const rows = ((baseData as Record<string, unknown>[]) ?? []).map((r) => ({
       ...r,
-      profile: profileById.get(r.user_id),
-      set_by_profile: (r as any).set_by ? profileById.get((r as any).set_by) ?? null : null,
-    }));
+      profile: Array.isArray(r.profile) ? (r.profile[0] ?? null) : r.profile,
+      set_by_profile: Array.isArray(r.set_by_profile) ? (r.set_by_profile[0] ?? null) : r.set_by_profile,
+    })) as Attendance[];
     const entry = { at: Date.now(), rows };
     weekAttendanceCache.set(weekStartStr, entry);
     persistWeek(weekStartStr, entry);

@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { getUpcomingSaturday } from '../../lib/week';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { downloadCsv } from '../../lib/exportCsv';
+import { WeeklyTrendChart } from './WeeklyTrendChart';
+import { ClassBreakdownChart } from './ClassBreakdownChart';
 import type { Profile } from '../../types';
 
 const HISTORY_WEEKS = 12; // how many weeks back to include
@@ -12,6 +14,7 @@ type DashboardTab = 'war' | 'training' | 'summary';
 
 interface WeekRow {
   user_id: string;
+  week_start: string;
   status: 'join' | 'not_join' | 'maybe';
 }
 
@@ -55,7 +58,7 @@ function useAttendanceStats(): {
     setLoading(true);
     supabase
       .from('attendance')
-      .select('user_id,status')
+      .select('user_id,week_start,status')
       .in('week_start', weeks)
       .then(({ data }) => {
         if (cancelled) return;
@@ -321,7 +324,40 @@ export function PlayerStatsDashboard() {
         {loading ? (
           <div className="p-12 text-center text-slate-500">Loading stats…</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Charts section */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 p-4">
+              {tab === 'war' && (
+                <WeeklyTrendChart weeks={warStats.weeks} rows={warStats.rows} />
+              )}
+              <ClassBreakdownChart
+                rows={tab === 'war' ? warStats.rows : tab === 'training' ? trainingStats.rows : [...warStats.rows, ...trainingStats.rows]}
+                profiles={profiles}
+              />
+            </div>
+            {/* Summary stats cards */}
+            {tab === 'war' && (() => {
+              const totalRows = warStats.rows.length;
+              const joinRows = warStats.rows.filter((r) => r.status === 'join').length;
+              const avgRate = totalRows > 0 ? Math.round((joinRows / totalRows) * 100) : 0;
+              return (
+                <div className="grid grid-cols-3 gap-3 px-4 pb-4">
+                  <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-3 text-center">
+                    <p className="text-xs text-slate-400">Avg Attendance</p>
+                    <p className="text-xl font-bold text-emerald-400">{avgRate}%</p>
+                  </div>
+                  <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-3 text-center">
+                    <p className="text-xs text-slate-400">Weeks</p>
+                    <p className="text-xl font-bold text-white">{HISTORY_WEEKS}</p>
+                  </div>
+                  <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-3 text-center">
+                    <p className="text-xs text-slate-400">Total Responses</p>
+                    <p className="text-xl font-bold text-white">{totalRows}</p>
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-800/60 border-b border-slate-700">
                 <tr>
@@ -430,7 +466,7 @@ export function PlayerStatsDashboard() {
               </tbody>
             </table>
           </div>
-        )}
+        </>)}
 
         {/* Summary footer */}
         {!loading && sorted.length > 0 && (

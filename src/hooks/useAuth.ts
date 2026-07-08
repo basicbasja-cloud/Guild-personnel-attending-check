@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { withDbTiming } from '../lib/dbTiming';
@@ -236,7 +236,16 @@ export function useAuth() {
     return { user: null, session: null, profile: null, loading: true, error: null };
   });
 
+  const profileCache = useRef<Map<string, { data: ProfileFetchResult; at: number }>>(new Map());
+  const PROFILE_CACHE_TTL_MS = 10_000; // 10 seconds
+
   const fetchProfile = useCallback(async (userId: string): Promise<ProfileFetchResult> => {
+    // Check in-memory cache first
+    const cached = profileCache.current.get(userId);
+    if (cached && Date.now() - cached.at < PROFILE_CACHE_TTL_MS) {
+      return cached.data;
+    }
+
     try {
       const result = await withTimeout(
         withDbTiming('GET', `profiles.fetch user=${userId}`, () =>
@@ -251,15 +260,21 @@ export function useAuth() {
       );
 
       if (!result.error && result.data) {
-        return { profile: result.data as Profile, shouldUpsert: false };
+        const fetchResult: ProfileFetchResult = { profile: result.data as Profile, shouldUpsert: false };
+        profileCache.current.set(userId, { data: fetchResult, at: Date.now() });
+        return fetchResult;
       }
 
       // If there is no row yet, create one via upsert.
       if (!result.error && !result.data) {
-        return { profile: null, shouldUpsert: true };
+        const fetchResult: ProfileFetchResult = { profile: null, shouldUpsert: true };
+        profileCache.current.set(userId, { data: fetchResult, at: Date.now() });
+        return fetchResult;
       }
 
-      return { profile: null, shouldUpsert: false };
+      const fetchResult: ProfileFetchResult = { profile: null, shouldUpsert: false };
+      profileCache.current.set(userId, { data: fetchResult, at: Date.now() });
+      return fetchResult;
     } catch (error) {
       if (!(error instanceof Error && error.message.includes('Request timed out'))) {
         console.warn('Profile fetch failed; continuing with cached/fallback profile.');

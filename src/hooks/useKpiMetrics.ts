@@ -53,14 +53,14 @@ export function useKpiMetrics(userId: string, weekStart: string): UseKpiMetricsR
     setLoading(true);
     setError(null);
 
-    // Fetch up to 2 entries for this user (current week + most recent previous week)
+    // Fetch entries for this user (including current week + previous for trends)
     const fetchEntries = async () => {
       const { data, error: dbErr } = await supabase
         .from('kpi_weekly_entries')
         .select('*')
         .eq('user_id', userId)
         .order('week_start', { ascending: false })
-        .limit(2);
+        .limit(5);
 
       if (cancelled) return;
       if (dbErr) {
@@ -75,15 +75,15 @@ export function useKpiMetrics(userId: string, weekStart: string): UseKpiMetricsR
     fetchEntries();
 
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, weekStart]);
 
   const result = useMemo(() => {
-    // Find current week entry (exact match or closest)
+    // Find current week entry (exact match only — no fallback to latest)
     const current = entries.find(
       (e) => e.week_start.slice(0, 10) === weekStart.slice(0, 10),
-    ) ?? entries[0] ?? null;
+    ) ?? null;
 
-    // Find previous week entry
+    // Find previous week entry (different week, not the current one)
     const previous = current
       ? entries.find(
           (e) => e.id !== current.id && e.week_start.slice(0, 10) !== weekStart.slice(0, 10),
