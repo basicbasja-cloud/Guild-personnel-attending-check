@@ -177,10 +177,15 @@ function weeksBetween(firstDate: Date, secondDate: Date): number {
 }
 
 function buildStats(profiles: Profile[], rows: { user_id: string; week_start: string; status: string }[]): PlayerStat[] {
-  // Track first recorded week per user
+  const programStart = new Date(PROGRAM_START_DATE + 'T00:00:00');
+  const now = getUpcomingSaturday(new Date());
+
+  // Only count rows from program start date onwards
+  const eligibleRows = rows.filter((r) => r.week_start >= PROGRAM_START_DATE);
+
   const firstWeekByUser = new Map<string, string>();
   const statusByUser = new Map<string, { join: number; maybe: number; not_join: number }>();
-  for (const r of rows) {
+  for (const r of eligibleRows) {
     const s = statusByUser.get(r.user_id) ?? { join: 0, maybe: 0, not_join: 0 };
     if (r.status === 'join' || r.status === 'not_join' || r.status === 'maybe') {
       s[r.status]++;
@@ -196,16 +201,15 @@ function buildStats(profiles: Profile[], rows: { user_id: string; week_start: st
     }
   }
 
-  const now = getUpcomingSaturday(new Date());
-
   return profiles.map((p) => {
     const s = statusByUser.get(p.id) ?? { join: 0, maybe: 0, not_join: 0 };
     const firstWk = firstWeekByUser.get(p.id);
 
-    // Player's total eligible weeks: from their first join to current week
-    const playerTotal = firstWk
-      ? weeksBetween(new Date(firstWk + 'T00:00:00'), now)
-      : 0;
+    // Player's total eligible weeks: from max(program start, player's first join) to current week
+    const effectiveStart = firstWk
+      ? new Date(Math.max(new Date(firstWk + 'T00:00:00').getTime(), programStart.getTime()))
+      : programStart;
+    const playerTotal = weeksBetween(effectiveStart, now);
 
     const responded = s.join + s.maybe + s.not_join;
     const non_select = Math.max(0, playerTotal - responded);
