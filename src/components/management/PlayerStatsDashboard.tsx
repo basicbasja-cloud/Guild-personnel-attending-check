@@ -439,7 +439,11 @@ export function PlayerStatsDashboard() {
                 const chartRows = allTime ? warStats.allTimeRows : warStats.rows;
                 const chartWeeks = allTime ? allTimeWeeks : warStats.weeks;
                 return (
-                  <WeeklyTrendChart weeks={chartWeeks} rows={chartRows} />
+                  <WeeklyTrendChart
+                    weeks={chartWeeks}
+                    rows={chartRows}
+                    onBarClick={(week) => setSelectedWeek(week === selectedWeek ? null : week)}
+                  />
                 );
               })()}
               {tab === 'training' && (
@@ -449,7 +453,7 @@ export function PlayerStatsDashboard() {
                   onBarClick={(week) => setSelectedWeek(week === selectedWeek ? null : week)}
                 />
               )}
-              {selectedWeek && tab === 'training' ? (
+              {selectedWeek ? (
                 <div className="bg-slate-900 rounded-xl border border-slate-700 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-white font-semibold text-sm">🏛️ Class Breakdown — week of {selectedWeek}</h3>
@@ -461,7 +465,7 @@ export function PlayerStatsDashboard() {
                     </button>
                   </div>
                   <ClassBreakdownChart
-                    rows={trainingStats.rows.filter((r) => r.week_start === selectedWeek)}
+                    rows={(tab === 'war' ? (allTime ? warStats.allTimeRows : warStats.rows) : trainingStats.rows).filter((r) => r.week_start === selectedWeek)}
                     profiles={profiles}
                   />
                 </div>
