@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { formatISO, subWeeks } from 'date-fns';
+import { formatISO, subWeeks, addWeeks } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { getUpcomingSaturday } from '../../lib/week';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
@@ -9,13 +9,15 @@ import { ClassBreakdownChart } from './ClassBreakdownChart';
 import type { Profile } from '../../types';
 
 const HISTORY_WEEKS = 12; // how many weeks back to include
+const HIGH_JOIN_THRESHOLD = 60;
+const PROGRAM_START_DATE = '2026-04-18'; // first Saturday the program launched
 
 type DashboardTab = 'war' | 'training' | 'summary';
 
 interface WeekRow {
   user_id: string;
   week_start: string;
-  status: 'join' | 'not_join' | 'maybe';
+  status: string;
 }
 
 interface PlayerStat {
@@ -47,76 +49,134 @@ function buildWeekStrs(count: number): string[] {
 function useAttendanceStats(): {
   rows: WeekRow[];
   weeks: string[];
+  totalWeeks: number;
+  allTimeRows: WeekRow[];
   loading: boolean;
 } {
   const [rows, setRows] = useState<WeekRow[]>([]);
+  const [allTimeRows, setAllTimeRows] = useState<WeekRow[]>([]);
+  const [totalWeeks, setTotalWeeks] = useState(0);
   const [loading, setLoading] = useState(true);
   const [weeks] = useState<string[]>(() => buildWeekStrs(HISTORY_WEEKS));
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+
+    // Single query — fetch all attendance data, derive 12-week subset client-side
     supabase
       .from('attendance')
       .select('user_id,week_start,status')
-      .in('week_start', weeks)
       .then(({ data }) => {
         if (cancelled) return;
-        setRows((data as WeekRow[]) ?? []);
+        const all = (data as WeekRow[]) ?? [];
+        setAllTimeRows(all);
+
+        // totalWeeks: number of weeks from program start (2026-04-18) to current week
+        const first = new Date(PROGRAM_START_DATE + 'T00:00:00');
+        const now = getUpcomingSaturday(new Date());
+        const span = Math.max(1, Math.round((now.getTime() - first.getTime()) / MS_PER_WEEK) + 1);
+        setTotalWeeks(span);
+
+        // Derive 12-week subset for chart
+        const weekSet = new Set(weeks);
+        setRows(all.filter((r) => weekSet.has(r.week_start)));
         setLoading(false);
       }, () => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [weeks]);
 
-  return { rows, weeks, loading };
+  return { rows, weeks, totalWeeks, allTimeRows, loading };
 }
 
 function useTrainingStats(): {
-  rows: { user_id: string; status: string }[];
+  rows: WeekRow[];
+  weeks: string[];
   loading: boolean;
   eventCount: number;
 } {
-  const [rows, setRows] = useState<{ user_id: string; status: string }[]>([]);
+  const [rows, setRows] = useState<WeekRow[]>([]);
+  const [weeks, setWeeks] = useState<string[]>([]);
   const [eventCount, setEventCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    // Get all training events first
+    // Get all training events with their dates
     supabase
       .from('guild_events')
-      .select('id')
+      .select('id,event_date')
       .eq('event_type', 'training')
+      .not('event_date', 'is', null)
+      .order('event_date', { ascending: false })
       .then(({ data: events }) => {
         if (cancelled) return;
-        const eventIds = (events ?? []).map((e: { id: string }) => e.id);
-        setEventCount(eventIds.length);
+        const eventList = (events ?? []) as { id: string; event_date: string }[];
+        setEventCount(eventList.length);
 
-        if (eventIds.length === 0) {
+        if (eventList.length === 0) {
           setRows([]);
+          setWeeks([]);
           setLoading(false);
           return;
         }
 
-        // Then get all training attendance for those events
+        const eventIds = eventList.map((e) => e.id);
+
+        // Get training attendance for all events
         supabase
           .from('training_attendance')
-          .select('user_id,status')
+          .select('user_id,event_id,status')
           .in('event_id', eventIds)
-          .then(({ data }) => {
+          .then(({ data: attRows }) => {
             if (cancelled) return;
-            setRows((data as { user_id: string; status: string }[]) ?? []);
+            const raw = (attRows ?? []) as { user_id: string; event_id: string; status: string }[];
+
+            // Build a map from event_id → ISO week start (Monday)
+            const eventWeekMap = new Map<string, string>();
+            for (const ev of eventList) {
+              const d = new Date(ev.event_date + 'T00:00:00');
+              const day = d.getDay();
+              const monOffset = day === 0 ? -6 : 1 - day; // Monday
+              const monday = new Date(d);
+              monday.setDate(d.getDate() + monOffset);
+              const weekStr = monday.toISOString().slice(0, 10);
+              eventWeekMap.set(ev.id, weekStr);
+            }
+
+            // Build unique sorted week list
+            const weekSet = new Set(eventWeekMap.values());
+            const sortedWeeks = Array.from(weekSet).sort();
+            setWeeks(sortedWeeks);
+
+            // Map attendance rows to week_start
+            const mapped: WeekRow[] = raw
+              .filter((r) => eventWeekMap.has(r.event_id))
+              .map((r) => ({
+                user_id: r.user_id,
+                week_start: eventWeekMap.get(r.event_id)!,
+                status: r.status,
+              }));
+            setRows(mapped);
             setLoading(false);
           }, () => { if (!cancelled) setLoading(false); });
       }, () => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
-  return { rows, loading, eventCount };
+  return { rows, weeks, loading, eventCount };
 }
 
-function buildStats(profiles: Profile[], rows: { user_id: string; status: string }[], totalCount: number): PlayerStat[] {
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+
+function weeksBetween(firstDate: Date, secondDate: Date): number {
+  return Math.max(1, Math.round((secondDate.getTime() - firstDate.getTime()) / MS_PER_WEEK) + 1);
+}
+
+function buildStats(profiles: Profile[], rows: { user_id: string; week_start: string; status: string }[]): PlayerStat[] {
+  // Track first recorded week per user
+  const firstWeekByUser = new Map<string, string>();
   const statusByUser = new Map<string, { join: number; maybe: number; not_join: number }>();
   for (const r of rows) {
     const s = statusByUser.get(r.user_id) ?? { join: 0, maybe: 0, not_join: 0 };
@@ -124,19 +184,39 @@ function buildStats(profiles: Profile[], rows: { user_id: string; status: string
       s[r.status]++;
     }
     statusByUser.set(r.user_id, s);
+
+    // Track earliest week for this user
+    if (r.week_start) {
+      const existing = firstWeekByUser.get(r.user_id);
+      if (!existing || r.week_start < existing) {
+        firstWeekByUser.set(r.user_id, r.week_start);
+      }
+    }
   }
+
+  const now = getUpcomingSaturday(new Date());
+
   return profiles.map((p) => {
     const s = statusByUser.get(p.id) ?? { join: 0, maybe: 0, not_join: 0 };
+    const firstWk = firstWeekByUser.get(p.id);
+
+    // Player's total eligible weeks: from their first join to current week
+    const playerTotal = firstWk
+      ? weeksBetween(new Date(firstWk + 'T00:00:00'), now)
+      : 0;
+
     const responded = s.join + s.maybe + s.not_join;
-    const non_select = Math.max(0, totalCount - responded);
-    const attendance_rate = totalCount > 0 ? Math.round(((s.join + s.maybe) / totalCount) * 100) : 0;
+    const non_select = Math.max(0, playerTotal - responded);
+    const attendance_rate = playerTotal > 0
+      ? Math.round(((s.join + s.maybe) / playerTotal) * 100)
+      : 0;
     const main_skill = p.main_skill_name
       ? `${p.main_skill_name}${p.main_skill_level != null ? ` Lv.${p.main_skill_level}` : ''}`
       : '';
     const sub_skill = p.sub_skill_name
       ? `${p.sub_skill_name}${p.sub_skill_level != null ? ` Lv.${p.sub_skill_level}` : ''}`
       : '';
-    return { profile: p, join: s.join, maybe: s.maybe, not_join: s.not_join, non_select, total: totalCount, attendance_rate, main_skill, sub_skill };
+    return { profile: p, join: s.join, maybe: s.maybe, not_join: s.not_join, non_select, total: playerTotal, attendance_rate, main_skill, sub_skill };
   });
 }
 
@@ -146,17 +226,33 @@ export function PlayerStatsDashboard() {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('active_score');
   const [sortDesc, setSortDesc] = useState(true);
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+  const [allTime, setAllTime] = useState(false);
 
   const warStats = useAttendanceStats();
   const trainingStats = useTrainingStats();
 
+  const warSourceRows = allTime ? warStats.allTimeRows : warStats.rows;
   const warStatList = useMemo(
-    () => buildStats(profiles, warStats.rows, HISTORY_WEEKS),
-    [profiles, warStats.rows]
+    () => buildStats(profiles, warSourceRows),
+    [profiles, warSourceRows]
   );
+  const allTimeWeeks = useMemo(() => {
+    // Generate continuous weeks from program start to now, newest first.
+    // The WeeklyTrendChart reverses the array, which results in oldest-left → newest-right.
+    const first = new Date(PROGRAM_START_DATE + 'T00:00:00');
+    const last = getUpcomingSaturday(new Date());
+    const weeks: string[] = [];
+    let cur = new Date(last);
+    while (cur >= first) {
+      weeks.push(formatISO(cur, { representation: 'date' }));
+      cur = addWeeks(cur, -1);
+    }
+    return weeks;
+  }, [warStats.allTimeRows]);
   const trainingStatList = useMemo(
-    () => buildStats(profiles, trainingStats.rows, Math.max(trainingStats.eventCount, 1)),
-    [profiles, trainingStats.rows, trainingStats.eventCount]
+    () => buildStats(profiles, trainingStats.rows),
+    [profiles, trainingStats.rows]
   );
 
   const stats = useMemo(() => {
@@ -305,6 +401,18 @@ export function PlayerStatsDashboard() {
               {tab === 'summary' ? 'War ×0.7 + Training ×0.3' : tab === 'war' ? `Last ${HISTORY_WEEKS} weeks` : `${trainingStats.eventCount} training events`}
               · {profiles.length} players
             </p>
+            {tab === 'war' && (
+              <button
+                onClick={() => setAllTime((a) => !a)}
+                className={`text-xs px-2 py-1 rounded border transition-colors ${
+                  allTime
+                    ? 'bg-indigo-700 border-indigo-500 text-white'
+                    : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'
+                }`}
+              >
+                {allTime ? '📅 All Time' : '📅 12 Weeks'}
+              </button>
+            )}
             <input
               type="text"
               value={search}
@@ -327,32 +435,76 @@ export function PlayerStatsDashboard() {
           <>
             {/* Charts section */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 p-4">
-              {tab === 'war' && (
-                <WeeklyTrendChart weeks={warStats.weeks} rows={warStats.rows} />
+              {tab === 'war' && (() => {
+                const chartRows = allTime ? warStats.allTimeRows : warStats.rows;
+                const chartWeeks = allTime ? allTimeWeeks : warStats.weeks;
+                return (
+                  <WeeklyTrendChart weeks={chartWeeks} rows={chartRows} />
+                );
+              })()}
+              {tab === 'training' && (
+                <WeeklyTrendChart
+                  weeks={trainingStats.weeks}
+                  rows={trainingStats.rows}
+                  onBarClick={(week) => setSelectedWeek(week === selectedWeek ? null : week)}
+                />
               )}
-              <ClassBreakdownChart
-                rows={tab === 'war' ? warStats.rows : tab === 'training' ? trainingStats.rows : [...warStats.rows, ...trainingStats.rows]}
-                profiles={profiles}
-              />
+              {selectedWeek && tab === 'training' ? (
+                <div className="bg-slate-900 rounded-xl border border-slate-700 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-white font-semibold text-sm">🏛️ Class Breakdown — week of {selectedWeek}</h3>
+                    <button
+                      onClick={() => setSelectedWeek(null)}
+                      className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+                  <ClassBreakdownChart
+                    rows={trainingStats.rows.filter((r) => r.week_start === selectedWeek)}
+                    profiles={profiles}
+                  />
+                </div>
+              ) : (
+                <ClassBreakdownChart
+                  rows={tab === 'war' ? warStats.rows : tab === 'training' ? trainingStats.rows : [...warStats.rows, ...trainingStats.rows]}
+                  profiles={profiles}
+                />
+              )}
             </div>
             {/* Summary stats cards */}
             {tab === 'war' && (() => {
-              const totalRows = warStats.rows.length;
-              const joinRows = warStats.rows.filter((r) => r.status === 'join').length;
-              const avgRate = totalRows > 0 ? Math.round((joinRows / totalRows) * 100) : 0;
+              // Use all-time or 12-week data based on toggle
+              const sourceRows = allTime ? warStats.allTimeRows : warStats.rows;
+
+              // Per-week stats
+              const joinCountByWeek = new Map<string, number>();
+              const weekSet = new Set<string>();
+              for (const r of sourceRows) {
+                weekSet.add(r.week_start);
+                if (r.status === 'join') {
+                  joinCountByWeek.set(r.week_start, (joinCountByWeek.get(r.week_start) ?? 0) + 1);
+                }
+              }
+              const sourceWeekCount = allTime ? warStats.totalWeeks : weekSet.size;
+              const weeksWithHighJoin = Array.from(joinCountByWeek.values()).filter((c) => c >= HIGH_JOIN_THRESHOLD).length;
+              const avgJoinPerWeek = sourceWeekCount > 0
+                ? Math.round(Array.from(joinCountByWeek.values()).reduce((a, b) => a + b, 0) / sourceWeekCount)
+                : 0;
+
               return (
-                <div className="grid grid-cols-3 gap-3 px-4 pb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 px-4 pb-4">
                   <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-3 text-center">
-                    <p className="text-xs text-slate-400">Avg Attendance</p>
-                    <p className="text-xl font-bold text-emerald-400">{avgRate}%</p>
+                    <p className="text-xs text-slate-400">Weeks (total)</p>
+                    <p className="text-xl font-bold text-white">{warStats.totalWeeks}</p>
                   </div>
                   <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-3 text-center">
-                    <p className="text-xs text-slate-400">Weeks</p>
-                    <p className="text-xl font-bold text-white">{HISTORY_WEEKS}</p>
+                    <p className="text-xs text-slate-400">Avg Join / Week</p>
+                    <p className="text-xl font-bold text-emerald-400">{avgJoinPerWeek}</p>
                   </div>
                   <div className="bg-slate-800/60 rounded-xl border border-slate-700 p-3 text-center">
-                    <p className="text-xs text-slate-400">Total Responses</p>
-                    <p className="text-xl font-bold text-white">{totalRows}</p>
+                    <p className="text-xs text-slate-400">≥{HIGH_JOIN_THRESHOLD} Join Weeks</p>
+                    <p className="text-xl font-bold text-indigo-400">{weeksWithHighJoin}</p>
                   </div>
                 </div>
               );

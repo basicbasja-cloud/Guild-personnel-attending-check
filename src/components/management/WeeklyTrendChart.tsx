@@ -9,6 +9,7 @@ interface RawAttendanceRow {
 interface WeeklyTrendChartProps {
   weeks: string[];
   rows: RawAttendanceRow[];
+  onBarClick?: (weekStart: string) => void;
 }
 
 const MAX_BAR_HEIGHT = 100; // px
@@ -17,13 +18,14 @@ const MAX_BAR_HEIGHT = 100; // px
  * Pure CSS bar chart showing attendance rate per week over the last 12 weeks.
  * Each bar shows join (green), maybe (amber), not_join (red) stacked.
  */
-export function WeeklyTrendChart({ weeks, rows }: WeeklyTrendChartProps) {
+export function WeeklyTrendChart({ weeks, rows, onBarClick }: WeeklyTrendChartProps) {
   const weeklyData = useMemo(() => {
     const reversed = [...weeks].reverse();
     return reversed.map((week) => {
       const weekRows = rows.filter((r) => r.week_start === week);
       return {
-        week: week.slice(5), // Show MM-DD
+        week,
+        weekLabel: week.slice(5), // Show MM-DD
         join: weekRows.filter((r) => r.status === 'join').length,
         maybe: weekRows.filter((r) => r.status === 'maybe').length,
         notJoin: weekRows.filter((r) => r.status === 'not_join').length,
@@ -48,7 +50,9 @@ export function WeeklyTrendChart({ weeks, rows }: WeeklyTrendChartProps) {
             const notJoinPx = total > 0 ? Math.round((w.notJoin / total) * barPx) : 0;
             return (
               <div key={w.week} className="flex-1 flex flex-col items-center gap-1 group relative">
-                <div className="w-full flex flex-col-reverse rounded-t-sm overflow-hidden transition-all group-hover:opacity-80"
+                <div
+                  onClick={() => onBarClick?.(w.week)}
+                  className={`w-full flex flex-col-reverse rounded-t-sm overflow-hidden transition-all group-hover:opacity-80 ${onBarClick ? 'cursor-pointer' : ''}`}
                   style={{ height: barPx }}>
                   {notJoinPx > 0 && <div style={{ height: notJoinPx }} className="bg-red-600/70 w-full shrink-0" />}
                   {maybePx > 0 && <div style={{ height: maybePx }} className="bg-amber-600/70 w-full shrink-0" />}
@@ -58,7 +62,7 @@ export function WeeklyTrendChart({ weeks, rows }: WeeklyTrendChartProps) {
                 <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                   ✅{w.join} 🤔{w.maybe} ❌{w.notJoin}
                 </div>
-                <span className="text-[10px] text-slate-500 truncate w-full text-center">{w.week}</span>
+                <span className="text-[10px] text-slate-500 truncate w-full text-center">{w.weekLabel}</span>
               </div>
             );
           })}

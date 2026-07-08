@@ -1,3 +1,37 @@
+# Patch Notes — July 8, 2026
+
+---
+
+## For Guild Members & Officers
+
+### Bug Fixes — Training Attendance
+
+- **✅ Join / ❌ Can't / 🤔 Maybe buttons now work reliably** — Previously, network glitches could leave buttons stuck in a loading state. Buttons now always reset properly, and expired login sessions auto-refresh behind the scenes.
+- **🗂️ Your response stays visible after closing & reopening** — Before, closing the training attendance modal and reopening it could lose your selection even though the database saved it. This is now fixed: your response persists across page reloads, tab switches, and modal open/close cycles.
+- **⏳ Loading spinner** — The modal now shows a spinner while attendance data loads so you know something is happening.
+- **Real-time sync** — Training attendance changes now sync across open browser tabs in real time.
+
+### New Features — Analytics Dashboard
+
+- **📈 Training Trend Chart** — The War tab's weekly attendance trend chart is now also available on the **Training** tab, showing attendance grouped by ISO week.
+- **🔍 Click a bar → class breakdown** — Click any bar in the training trend chart to see a class-by-class breakdown of who responded that week (e.g., how many Crusaders joined, how many Sorcerers can't make it).
+- **📅 Toggle: 12 Weeks / All Time** — The War stats dashboard now has an **"All Time" toggle** that switches the stats cards and player table to show data from the entire program history (not just the last 12 weeks). The trend chart follows the toggle too.
+- **👤 Per-player rates** — Each member's attendance rate is now calculated from **their first recorded join date** to present. Weeks before a member joined don't count against their rate anymore.
+- **📊 Improved stats cards** — War tab now shows three clean summary cards: **Weeks (total)** since the program started (April 18, 2026), **Avg Join / Week**, and **≥60 Join Weeks**.
+
+### For Technical People
+
+- **Training attendance state sync overhaul** — `useTrainingAttendance` rewritten to match the proven `useAttendance` pattern: server-returned data on upsert, module-level cache sync, localStorage persistence, JWT expiry retry, and rollback on error.
+- **SQL JOIN optimization** — Both `useAttendance` and `useTrainingAttendance` fetch hooks now use a single Supabase query with embedded joins instead of two sequential queries, cutting DB latency by ~50%.
+- **Cache eviction** — Stale training attendance cache entries are automatically cleaned from memory and localStorage to prevent unbounded growth.
+- **`WeeklyTrendChart` clickable bars** — New optional `onBarClick` prop enables per-bar click handlers.
+- **Shared `OnBehalfSection` component** — The member search + status picker UI is now a single shared component used by both training and weekly attendance, eliminating ~160 lines of duplicated code.
+- **Shared attendance constants** — `STATUS_CONFIG` and `STATUS_OPTIONS` extracted to `src/constants/attendance.ts`.
+- **PlayerStatsDashboard optimizations** — Single DB query instead of two, per-player week tracking, all-time/12-week toggle, continuous week generation for chart axis, memoized `allTimeWeeks`.
+- **Fixed pre-existing TS errors** in `AnnouncementsPage.tsx` (type mismatch on `onToggleReaction`) and `ClassBreakdownChart.tsx` (unused variables).
+
+---
+
 # Patch Notes — June 12, 2026
 
 ---
