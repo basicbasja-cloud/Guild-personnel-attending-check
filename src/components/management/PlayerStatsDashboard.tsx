@@ -63,10 +63,12 @@ function useAttendanceStats(): {
     let cancelled = false;
     setLoading(true);
 
-    // Single query — fetch all attendance data, derive 12-week subset client-side
+    // Single query — fetch attendance data up to current week (excludes future pre-filled records)
+    const todayStr = formatISO(getUpcomingSaturday(new Date()), { representation: 'date' });
     supabase
       .from('attendance')
       .select('user_id,week_start,status')
+      .lte('week_start', todayStr)
       .then(({ data }) => {
         if (cancelled) return;
         const all = (data as WeekRow[]) ?? [];
