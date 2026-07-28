@@ -41,7 +41,8 @@ export function WeeklyTrendChart({ weeks, rows, onBarClick }: WeeklyTrendChartPr
       {weeklyData.every((w) => w.join + w.maybe + w.notJoin === 0) ? (
         <p className="text-slate-500 text-sm py-8 text-center">No attendance data for the last {weeks.length} weeks.</p>
       ) : (
-        <div className="flex items-end gap-1.5" style={{ height: MAX_BAR_HEIGHT }}>
+        <div className="overflow-x-auto sm:overflow-visible -mx-1 sm:mx-0 px-1 sm:px-0">
+          <div className="flex items-end gap-1.5 min-w-[500px] sm:min-w-0" style={{ height: MAX_BAR_HEIGHT }}>
           {weeklyData.map((w) => {
             const total = w.join + w.maybe + w.notJoin;
             const barPx = Math.max(Math.round((total / maxVal) * MAX_BAR_HEIGHT), 2);
@@ -66,6 +67,7 @@ export function WeeklyTrendChart({ weeks, rows, onBarClick }: WeeklyTrendChartPr
               </div>
             );
           })}
+          </div>
         </div>
       )}
       <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
