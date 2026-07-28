@@ -365,11 +365,11 @@ export function PlayerStatsDashboard() {
     <div className="max-w-screen-xl mx-auto p-3 sm:p-4 pt-6">
       <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
         {/* Header */}
-        <div className="px-4 py-4 border-b border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <h2 className="text-white font-bold text-lg">Player Stats Dashboard</h2>
+        <div className="px-3 sm:px-4 py-3 sm:py-4 border-b border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <h2 className="text-white font-bold text-sm sm:text-lg">Player Stats Dashboard</h2>
             {/* Sub-tabs */}
-            <div className="flex bg-slate-800 rounded-lg p-0.5">
+            <div className="flex bg-slate-800 rounded-lg p-0.5 self-start sm:self-auto">
               <button
                 onClick={() => setTab('summary')}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
@@ -402,7 +402,7 @@ export function PlayerStatsDashboard() {
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <p className="text-slate-400 text-xs mr-1">
               {tab === 'summary' ? 'War ×0.7 + Training ×0.3' : tab === 'war' ? `Last ${HISTORY_WEEKS} weeks` : `${trainingStats.eventCount} training events`}
               · {profiles.length} players
@@ -410,7 +410,7 @@ export function PlayerStatsDashboard() {
             {tab === 'war' && (
               <button
                 onClick={() => setAllTime((a) => !a)}
-                className={`text-xs px-2 py-1 rounded border transition-colors ${
+                className={`text-xs px-2 py-1 rounded border transition-colors shrink-0 ${
                   allTime
                     ? 'bg-indigo-700 border-indigo-500 text-white'
                     : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'
@@ -424,7 +424,7 @@ export function PlayerStatsDashboard() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search player…"
-              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500 w-44"
+              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500 w-full sm:w-44"
             />
             <button
               onClick={handleExport}

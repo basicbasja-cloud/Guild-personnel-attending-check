@@ -503,7 +503,7 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
       <div className="flex h-full min-h-0 overflow-hidden">
         {/* ── Left sidebar (unscheduled) — managers only ── */}
         {isManagement && (
-          <aside className="w-52 shrink-0 border-r border-slate-700 bg-slate-900 flex flex-col p-3 gap-3 overflow-y-auto">
+          <aside className="hidden md:block w-52 shrink-0 border-r border-slate-700 bg-slate-900 flex flex-col p-3 gap-3 overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Unscheduled</h3>
               <button
@@ -526,44 +526,44 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
         {/* ── Main calendar area ── */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-900 shrink-0 gap-2">
+          <div className="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 border-b border-slate-700 bg-slate-900 shrink-0 gap-1 sm:gap-2">
             <button
               onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
-              className="p-1.5 rounded hover:bg-slate-700 text-slate-300 transition-colors"
+              className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors touch-manipulation"
             >◀</button>
 
             {/* Month + year pickers */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 min-w-0">
               <select
                 value={selectedMonthIdx}
                 onChange={(e) => jumpToYearMonth(selectedYear, Number(e.target.value))}
-                className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none cursor-pointer"
+                className="bg-slate-800 border border-slate-600 rounded px-1.5 sm:px-2 py-1 text-xs sm:text-sm text-white focus:outline-none cursor-pointer max-w-[90px] sm:max-w-none"
               >
                 {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
               </select>
               <select
                 value={selectedYear}
                 onChange={(e) => jumpToYearMonth(Number(e.target.value), selectedMonthIdx)}
-                className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none cursor-pointer"
+                className="bg-slate-800 border border-slate-600 rounded px-1.5 sm:px-2 py-1 text-xs sm:text-sm text-white focus:outline-none cursor-pointer"
               >
                 {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               <button
                 onClick={() => setCurrentMonth(startOfMonth(new Date()))}
-                className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 transition-colors"
+                className="text-xs px-2 sm:px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 transition-colors whitespace-nowrap"
               >Today</button>
               {isManagement && (
                 <button
                   onClick={() => openCreate()}
-                  className="text-xs px-2.5 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-white font-semibold transition-colors"
+                  className="text-xs px-2 sm:px-2.5 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-white font-semibold transition-colors whitespace-nowrap"
                 >+ Event</button>
               )}
               <button
                 onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
-                className="p-1.5 rounded hover:bg-slate-700 text-slate-300 transition-colors"
+                className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-slate-700 text-slate-300 transition-colors touch-manipulation"
               >▶</button>
             </div>
           </div>
@@ -582,7 +582,7 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
           ) : (
             /* Calendar grid — 6 rows */
             <div className="flex-1 overflow-y-auto">
-              <div className="grid grid-cols-7 auto-rows-[minmax(80px,1fr)]">
+              <div className="grid grid-cols-7 auto-rows-[minmax(60px,1fr)] sm:auto-rows-[minmax(80px,1fr)]">
                 {calendarDays.map((day) => {
                   const dateStr = format(day, 'yyyy-MM-dd');
                   return (
