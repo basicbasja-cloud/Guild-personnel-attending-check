@@ -59,30 +59,30 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
   return (
     <div className="max-w-lg mx-auto p-4 pt-6">
       {/* Week selector */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-2">
         <button
           onClick={() => setWeekOffset((w) => w - 1)}
-          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+          className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors touch-manipulation"
         >
           ◀
         </button>
-        <div className="text-center">
-          <p className="text-white font-semibold">{weekLabel}</p>
+        <div className="text-center min-w-0 flex-1">
+          <p className="text-white font-semibold text-sm sm:text-base">{weekLabel}</p>
           {weekOffset === 0 && (
             <span className="text-xs text-indigo-400 font-medium">Current Week</span>
           )}
         </div>
         <button
           onClick={() => setWeekOffset((w) => w + 1)}
-          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+          className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors touch-manipulation"
         >
           ▶
         </button>
       </div>
 
       {/* Attendance card */}
-      <div className="bg-slate-900 rounded-2xl border border-slate-700 p-6 mb-6">
-        <h2 className="text-white font-bold text-xl mb-1">Guild War Attendance</h2>
+      <div className="bg-slate-900 rounded-2xl border border-slate-700 p-4 sm:p-6 mb-6">
+        <h2 className="text-white font-bold text-lg sm:text-xl mb-1">Guild War Attendance</h2>
         <p className="text-slate-400 text-sm mb-6">Will you participate in this week's guild war?</p>
 
         {error && (
@@ -91,7 +91,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {(Object.entries(STATUS_CONFIG) as [AttendanceStatus, (typeof STATUS_CONFIG)[AttendanceStatus]][]).map(
             ([status, cfg]) => {
               const selected = attendance?.status === status;
@@ -100,12 +100,12 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
                   key={status}
                   onClick={() => handleStatusSelect(status)}
                   disabled={submitting}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all
+                  className={`flex flex-col items-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl border-2 transition-all min-h-[80px] sm:min-h-[96px] touch-manipulation
                     ${selected ? `${cfg.bg} ${cfg.border}` : 'bg-slate-800 border-slate-600 hover:border-slate-500'}
                     disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  <span className="text-2xl">{cfg.emoji}</span>
-                  <span className={`font-semibold text-sm ${selected ? cfg.text : 'text-slate-300'}`}>
+                  <span className="text-xl sm:text-2xl">{cfg.emoji}</span>
+                  <span className={`font-semibold text-xs sm:text-sm leading-tight text-center ${selected ? cfg.text : 'text-slate-300'}`}>
                     {cfg.label}
                   </span>
                 </button>
@@ -127,7 +127,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
       </div>
 
       {/* Profile card */}
-      <div className="bg-slate-900 rounded-2xl border border-slate-700 p-6">
+      <div className="bg-slate-900 rounded-2xl border border-slate-700 p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-white font-bold text-lg">Character Info</h2>
           {!editingProfile && (
@@ -178,7 +178,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
             {/* Skill fields */}
             <div className="border-t border-slate-700 pt-3 mt-1">
               <p className="text-slate-400 text-xs font-semibold mb-2 uppercase tracking-wide">Ultimate Skills</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-400 text-xs font-medium block mb-1">Main Skill</label>
                   <input

@@ -116,12 +116,12 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
   };
 
   return (
-    <header className="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-      <div className="flex items-center gap-3">
+    <header className="bg-slate-900 border-b border-slate-700 px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between sticky top-0 z-40">
+      <div className="flex items-center gap-2 sm:gap-3">
         <div ref={pickerRef} className="relative">
           <button
             onClick={() => setShowPicker((p) => !p)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
+            className="w-8 h-8 min-w-[32px] rounded-lg flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
             style={{ backgroundColor: logoColor }}
             title="Change logo color"
           >
@@ -133,7 +133,7 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
                 <button
                   key={name}
                   onClick={() => handleColorSelect(hex)}
-                  className="w-6 h-6 rounded-full hover:scale-125 transition-transform ring-offset-slate-800"
+                  className="w-6 h-6 min-w-[24px] rounded-full hover:scale-125 transition-transform ring-offset-slate-800"
                   style={{ backgroundColor: hex, outline: logoColor === hex ? `2px solid white` : 'none', outlineOffset: '2px' }}
                   title={name}
                 />
@@ -141,17 +141,17 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
             </div>
           )}
         </div>
-        <h1 className="text-white font-bold text-lg hidden sm:block">Guild War Manager</h1>
+        <h1 className="text-white font-bold text-base sm:text-lg hidden sm:block">Guild War Manager</h1>
       </div>
 
       {profile && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <ConnectionBadge />
 
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200"
+            className="w-8 h-8 min-w-[32px] rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-all duration-200 touch-manipulation"
             title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {isDark ? (
@@ -168,7 +168,7 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
           <button
             onClick={onProfileClick}
             disabled={!onProfileClick}
-            className={`flex items-center gap-2 rounded-lg px-1 py-0.5 transition-colors
+            className={`flex items-center gap-1.5 sm:gap-2 rounded-lg px-1 py-0.5 transition-colors min-h-[36px]
               ${onProfileClick ? 'hover:bg-slate-700 cursor-pointer' : 'cursor-default'}`}
             title={onProfileClick ? 'My Profile' : undefined}
           >
@@ -176,10 +176,10 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
               <img
                 src={profile.avatar_url}
                 alt={profile.username}
-                className="w-8 h-8 rounded-full border-2 border-indigo-500"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-indigo-500"
               />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center text-white text-xs font-bold">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-indigo-700 flex items-center justify-center text-white text-xs font-bold">
                 {profile.username.charAt(0).toUpperCase()}
               </div>
             )}
@@ -200,7 +200,7 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
           ) : null}
           <button
             onClick={onSignOut}
-            className="text-slate-400 hover:text-white text-sm px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors"
+            className="text-slate-400 hover:text-white text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-1.5 rounded-lg hover:bg-slate-700 transition-colors touch-manipulation"
           >
             Sign out
           </button>

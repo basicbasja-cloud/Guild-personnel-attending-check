@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/auth/LoginPage';
+import { AccessKeyGatePage } from './components/auth/AccessKeyGatePage';
 import { Header } from './components/layout/Header';
 import { AttendancePage } from './components/attendance/AttendancePage';
 import { ManagementPage } from './components/management/ManagementPage';
@@ -147,6 +148,11 @@ function AppContent() {
     );
   }
 
+  // Access key gate — new users must enter a valid key before using the app
+  if (!auth.profile.access_granted) {
+    return <AccessKeyGatePage />;
+  }
+
   const tabs: { id: Tab; label: string; emoji: string; mgmtOnly?: boolean }[] = [
     { id: 'attendance', label: 'Attendance', emoji: '📋' },
     { id: 'roster', label: 'Roster', emoji: '👥' },
@@ -180,7 +186,7 @@ function AppContent() {
         />
 
         {/* Tab navigation */}
-        <div className="bg-slate-900 border-b border-slate-700 px-3 sm:px-4 overflow-x-auto">
+        <div className="bg-slate-900 border-b border-slate-700 px-2 sm:px-4 overflow-x-auto scrollbar-hide">
           <div className="flex gap-1 max-w-screen-2xl mx-auto w-max min-w-full">
             {visibleTabs.map((t) => (
               <button
@@ -194,15 +200,15 @@ function AppContent() {
                     try { localStorage.setItem('gwm_last_read_announcement', announcementIds[0] ?? ''); } catch {}
                   }
                 }}
-                className={`shrink-0 flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors
+                className={`shrink-0 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors min-h-[44px] touch-manipulation
                   ${
                     tab === t.id
                       ? 'border-indigo-500 text-indigo-400'
                       : 'border-transparent text-slate-400 hover:text-white'
                   }`}
               >
-                <span>{t.emoji}</span>
-                <span className="flex items-center gap-1.5">
+                <span className="text-base sm:text-base leading-none">{t.emoji}</span>
+                <span className="flex items-center gap-1.5 whitespace-nowrap">
                   {t.label}
                   {t.id === 'announcements' && <Badge count={badgeUnread} />}
                   {t.id === 'calendar' && <Badge count={trainingBadgeCount} pulse />}

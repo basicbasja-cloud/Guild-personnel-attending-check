@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import type { Profile } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
 import { evictProfileFromCache } from '../../hooks/useAllProfiles';
+import { useAccessKeys } from '../../hooks/useAccessKeys';
 
 interface AdminModePageProps {
   userId: string;
@@ -58,6 +59,17 @@ export function AdminModePage({ userId }: AdminModePageProps) {
   const [newClassName, setNewClassName] = useState('');
   const [newClassColor, setNewClassColor] = useState('#64748B');
   const [classSaving, setClassSaving] = useState(false);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [generatingKey, setGeneratingKey] = useState(false);
+
+  const {
+    keys: accessKeys,
+    loading: accessKeysLoading,
+    error: accessKeysError,
+    generateKey,
+    deactivateKey,
+    getKeyStatus,
+  } = useAccessKeys(storedPin);
 
   const hasPinLength = useMemo(() => /^\d{6}$/.test(pin), [pin]);
 
@@ -436,6 +448,111 @@ export function AdminModePage({ userId }: AdminModePageProps) {
               {item.name}
             </span>
           ))}
+        </div>
+      </div>
+
+      {/* Access Keys Section */}
+      <div className="bg-slate-900 rounded-2xl border border-slate-700 p-4 mb-6">
+        <h3 className="text-white font-bold text-base mb-2">Access Keys</h3>
+        <p className="text-slate-400 text-sm mb-4">
+          Generate 6-digit keys for new members. Each key expires 14 days after creation. You can deactivate keys anytime.
+        </p>
+
+        {accessKeysError && (
+          <div className="bg-red-900/40 border border-red-700 rounded-lg p-3 mb-4 text-red-300 text-sm">
+            {accessKeysError}
+          </div>
+        )}
+
+        {/* Generate Key */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+          <button
+            onClick={async () => {
+              setGeneratingKey(true);
+              setGeneratedKey(null);
+              const code = await generateKey();
+              if (code) setGeneratedKey(code);
+              setGeneratingKey(false);
+            }}
+            disabled={generatingKey}
+            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          >
+            {generatingKey ? 'Generating…' : 'Generate Key'}
+          </button>
+
+          {generatedKey && (
+            <div className="flex items-center gap-2 bg-slate-800 border border-emerald-700 rounded-lg px-4 py-2">
+              <span className="text-emerald-400 text-sm font-medium">New key:</span>
+              <span className="text-white text-lg font-mono font-bold tracking-widest">{generatedKey}</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(generatedKey).catch(() => {});
+                  setGeneratedKey(null);
+                }}
+                className="text-xs text-indigo-400 hover:text-indigo-300 ml-2"
+              >
+                Copy & Dismiss
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Key List */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+                <th className="text-left py-2 pr-4">Key</th>
+                <th className="text-left py-2 pr-4">Status</th>
+                <th className="text-left py-2 pr-4">Created</th>
+                <th className="text-left py-2 pr-4">Expires</th>
+                <th className="text-right py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accessKeysLoading ? (
+                <tr>
+                  <td colSpan={5} className="py-4 text-center text-slate-500">Loading keys…</td>
+                </tr>
+              ) : accessKeys.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-4 text-center text-slate-500">No keys generated yet.</td>
+                </tr>
+              ) : (
+                accessKeys.map((key) => {
+                  const status = getKeyStatus(key);
+                  return (
+                    <tr key={key.id} className="border-b border-slate-800">
+                      <td className="py-3 pr-4">
+                        <span className="font-mono text-white">{key.key_code}</span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className={`text-xs font-medium ${status.color}`}>{status.label}</span>
+                      </td>
+                      <td className="py-3 pr-4 text-slate-300 whitespace-nowrap">
+                        {new Date(key.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 pr-4 text-slate-300 whitespace-nowrap">
+                        {new Date(key.expires_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 text-right">
+                        {key.is_active && new Date(key.expires_at) > new Date() && (
+                          <button
+                            onClick={async () => {
+                              await deactivateKey(key.id);
+                            }}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-800 text-red-300 hover:bg-red-800/60 transition-colors"
+                          >
+                            Deactivate
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

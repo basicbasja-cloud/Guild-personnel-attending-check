@@ -15,6 +15,7 @@ export interface Profile {
   is_admin: boolean;
   is_super_manager: boolean;
   is_test_account: boolean;
+  access_granted: boolean;
   logo_color: string | null;
   notes: string | null;
   created_at: string;

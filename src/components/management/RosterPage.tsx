@@ -23,22 +23,22 @@ export function RosterPage({ userId, isManagement }: RosterPageProps) {
   return (
     <div className="max-w-2xl mx-auto p-4 pt-6">
       {/* Week selector */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-2">
         <button
           onClick={() => setWeekOffset((w) => w - 1)}
-          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+          className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors touch-manipulation"
         >
           ◀
         </button>
-        <div className="text-center">
-          <p className="text-white font-semibold">{weekLabel}</p>
+        <div className="text-center min-w-0 flex-1">
+          <p className="text-white font-semibold text-sm sm:text-base">{weekLabel}</p>
           {weekOffset === 0 && (
             <span className="text-xs text-indigo-400 font-medium">Current Week</span>
           )}
         </div>
         <button
           onClick={() => setWeekOffset((w) => w + 1)}
-          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+          className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors touch-manipulation"
         >
           ▶
         </button>

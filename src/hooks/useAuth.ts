@@ -109,6 +109,7 @@ function buildFallbackProfile(user: User): Profile {
     is_admin: false,
     is_super_manager: false,
     is_test_account: false,
+    access_granted: false,
     created_at: nowIso,
   };
 }

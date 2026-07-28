@@ -1500,3 +1500,207 @@ create policy "reactions_delete_own"
 create index if not exists idx_reactions_announcement
   on public.announcement_reactions (announcement_id);
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 26. ACCESS KEY SYSTEM
+--     Security: new users must enter a 6-digit admin-generated key before use.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Add access_granted column to profiles
+alter table public.profiles
+  add column if not exists access_granted boolean not null default false;
+
+-- Access keys table
+create table if not exists public.access_keys (
+  id          uuid primary key default gen_random_uuid(),
+  key_code    text not null unique,
+  created_by  uuid not null references public.profiles(id),
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null,
+  is_active   boolean not null default true,
+  notes       text
+);
+
+alter table public.access_keys enable row level security;
+
+-- Management can read all access keys
+drop policy if exists "access_keys_select_management" on public.access_keys;
+create policy "access_keys_select_management"
+  on public.access_keys for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and (is_management = true or is_admin = true)
+    )
+  );
+
+-- Management can insert access keys
+drop policy if exists "access_keys_insert_management" on public.access_keys;
+create policy "access_keys_insert_management"
+  on public.access_keys for insert
+  with check (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and (is_management = true or is_admin = true)
+    )
+  );
+
+-- Management can update access keys
+drop policy if exists "access_keys_update_management" on public.access_keys;
+create policy "access_keys_update_management"
+  on public.access_keys for update
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and (is_management = true or is_admin = true)
+    )
+  );
+
+-- Management can delete access keys
+drop policy if exists "access_keys_delete_management" on public.access_keys;
+create policy "access_keys_delete_management"
+  on public.access_keys for delete
+  using (
+    exists (
+      select 1 from public.profiles
+      where id = (select auth.uid()) and (is_management = true or is_admin = true)
+    )
+  );
+
+-- Index for fast key lookup
+create index if not exists idx_access_keys_key_code on public.access_keys (key_code);
+
+-- Index for expiration queries
+create index if not exists idx_access_keys_expires_at on public.access_keys (expires_at);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ACCESS KEY RPCs
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Generate a 6-digit random key (PIN-protected)
+drop function if exists public.generate_access_key;
+create or replace function public.generate_access_key(admin_pin text)
+returns text
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  configured_pin_hash text;
+  new_key             text;
+  pin_valid           boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select admin_pin_hash into configured_pin_hash
+    from public.admin_runtime_config where singleton = true;
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured';
+  end if;
+
+  pin_valid := encode(digest(admin_pin, 'sha256'), 'hex') = configured_pin_hash;
+  if not pin_valid then
+    raise exception 'Incorrect admin PIN';
+  end if;
+
+  loop
+    new_key := lpad(floor(random() * 1000000)::int::text, 6, '0');
+    exit when not exists (select 1 from public.access_keys where key_code = new_key);
+  end loop;
+
+  insert into public.access_keys (key_code, created_by, expires_at)
+  values (new_key, auth.uid(), now() + interval '14 days');
+
+  return new_key;
+end;
+$$;
+
+grant execute on function public.generate_access_key(text) to authenticated;
+revoke execute on function public.generate_access_key(text) from public;
+revoke execute on function public.generate_access_key(text) from anon;
+
+-- Verify an access key (checks if exists, active, and not expired)
+drop function if exists public.verify_access_key;
+create or replace function public.verify_access_key(key_code text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  return exists (
+    select 1 from public.access_keys
+    where access_keys.key_code = verify_access_key.key_code
+      and is_active = true
+      and expires_at > now()
+  );
+end;
+$$;
+
+grant execute on function public.verify_access_key(text) to authenticated;
+revoke execute on function public.verify_access_key(text) from public;
+revoke execute on function public.verify_access_key(text) from anon;
+
+-- Deactivate an access key (PIN-protected)
+drop function if exists public.deactivate_access_key;
+create or replace function public.deactivate_access_key(key_id uuid, admin_pin text)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  configured_pin_hash text;
+  pin_valid           boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select admin_pin_hash into configured_pin_hash
+    from public.admin_runtime_config where singleton = true;
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured';
+  end if;
+
+  pin_valid := encode(digest(admin_pin, 'sha256'), 'hex') = configured_pin_hash;
+  if not pin_valid then
+    raise exception 'Incorrect admin PIN';
+  end if;
+
+  update public.access_keys set is_active = false where id = key_id;
+end;
+$$;
+
+grant execute on function public.deactivate_access_key(uuid, text) to authenticated;
+revoke execute on function public.deactivate_access_key(uuid, text) from public;
+revoke execute on function public.deactivate_access_key(uuid, text) from anon;
+
+-- Grant access to the calling user (called after successful key verification)
+drop function if exists public.grant_user_access;
+create or replace function public.grant_user_access()
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  update public.profiles
+  set access_granted = true, updated_at = now()
+  where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.grant_user_access() to authenticated;
+revoke execute on function public.grant_user_access() from public;
+revoke execute on function public.grant_user_access() from anon;
+
