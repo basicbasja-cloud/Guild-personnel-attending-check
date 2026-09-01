@@ -8,6 +8,7 @@ import { ManagementPage } from './components/management/ManagementPage';
 import { RosterPage } from './components/management/RosterPage';
 import { AdminModePage } from './components/management/AdminModePage';
 import { PlayerStatsDashboard } from './components/management/PlayerStatsDashboard';
+import { ResponseLogPage } from './components/management/ResponseLogPage';
 import { LeagueBoardPage } from './components/league/LeagueBoardPage';
 import type { PartySummaryWithMembers } from './components/league/LeagueBoardPage';
 import { GuildCalendarPage } from './components/calendar/GuildCalendarPage';
@@ -21,6 +22,7 @@ import { preloadLeagueBoard } from './hooks/useLeagueBoard';
 import { preloadKpiProfile } from './hooks/useKpiProfile';
 import { preloadProfiles } from './hooks/useAllProfiles';
 import { preloadAttendance } from './hooks/useAttendance';
+import { preloadAttendanceLog } from './hooks/useAttendanceResponseLog';
 import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
 import { preloadGuildEvents, useGuildEvents } from './hooks/useGuildEvents';
 import { useTrainingNotification } from './hooks/useTrainingNotification';
@@ -28,7 +30,7 @@ import { FloatingNotification } from './components/ui/FloatingNotification';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
-type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'league' | 'calendar' | 'kpi' | 'announcements';
+type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'response-log' | 'league' | 'calendar' | 'kpi' | 'announcements';
 
 function AppContent() {
   const auth = useAuth();
@@ -112,6 +114,14 @@ function AppContent() {
     }
   }, [auth.user?.id]);
 
+  // Preload the manager-only Response Times log once the profile (and its
+  // is_management flag) is available, so the tab opens instantly.
+  useEffect(() => {
+    if (auth.profile?.id && auth.profile?.is_management) {
+      preloadAttendanceLog().catch(() => {});
+    }
+  }, [auth.profile?.id, auth.profile?.is_management]);
+
   if (auth.loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -159,6 +169,7 @@ function AppContent() {
     { id: 'announcements', label: 'Announcements', emoji: '📢' },
     { id: 'management', label: 'War Setup', emoji: '⚔️', mgmtOnly: true },
     { id: 'dashboard', label: 'Analytics', emoji: '📊', mgmtOnly: true },
+    { id: 'response-log', label: 'Response Times', emoji: '🕒', mgmtOnly: true },
     { id: 'league', label: 'League Board', emoji: '🗺️' },
     { id: 'calendar', label: 'Guild Event Schedule', emoji: '📅' },
     { id: 'kpi',   label: 'KPI Stats',  emoji: '🏆' },
@@ -240,6 +251,9 @@ function AppContent() {
           )}
           {tab === 'dashboard' && auth.profile.is_management && (
             <PlayerStatsDashboard />
+          )}
+          {tab === 'response-log' && auth.profile.is_management && (
+            <ResponseLogPage />
           )}
           {/* League board stays mounted to preserve state across tab switches */}
           <div className={tab === 'league' ? '' : 'hidden'}>
