@@ -3,6 +3,11 @@
     verify_jwt = false
 
 [events]
+  # Runs Mon, Wed, Thu, Fri at 18:00 UTC (matches hosted pg_cron job
+  # 'attendance-reminder-mon-wed-fri'). The function picks its message by day:
+  #   Mon     -> polite reminder, @GENESIS ping
+  #   Wed     -> "select attendance within today", @GENESIS ping
+  #   Thu/Fri -> "IT'S LATE", @GENESIS ping
   cron_jobs = [
-    { schedule = "0 18 * * 4", function = "attendance-reminder" }
+    { schedule = "0 18 * * 1,3-5", function = "attendance-reminder" }
   ]

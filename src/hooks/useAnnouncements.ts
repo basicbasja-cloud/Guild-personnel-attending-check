@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { notifyDiscord, DiscordColors } from '../lib/discordNotify';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -148,6 +149,15 @@ export function useAnnouncements(isManagement: boolean, userId?: string): UseAnn
       if (userId) insertPayload.created_by = userId;
       const { error: err } = await supabase.from('announcements').insert(insertPayload);
       if (err) throw err;
+
+      // Fire-and-forget: mirror new announcements to the Discord channel
+      notifyDiscord({
+        title: `📢 ${title}`,
+        description: content.slice(0, 4000),
+        color: pinned ? DiscordColors.amber : DiscordColors.indigo,
+        fields: pinned ? [{ name: '📌', value: 'Pinned announcement', inline: false }] : [],
+      });
+
       await fetch(); // Refresh to get real IDs
       return true;
     } catch (e: unknown) {
