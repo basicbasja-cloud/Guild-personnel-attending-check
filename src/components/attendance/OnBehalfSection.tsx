@@ -31,6 +31,7 @@ export function OnBehalfSection({
     return profiles.filter(
       (p) =>
         p.id !== currentUserId &&
+        p.is_disabled !== true && // disabled members cannot have status set on their behalf
         (!q ||
           p.username.toLowerCase().includes(q) ||
           (p.character_name ?? '').toLowerCase().includes(q))

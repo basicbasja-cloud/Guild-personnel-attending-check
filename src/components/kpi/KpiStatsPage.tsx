@@ -23,6 +23,8 @@ interface KpiStatsPageProps {
   currentUserId:  string;
   isSuperManager: boolean;
   isManager:      boolean;
+  /** Disabled members are view-only: no stat entry, no mini games. */
+  isDisabled?:    boolean;
 }
 
 function defaultWeek(): string {
@@ -41,7 +43,7 @@ function formatWeekLabel(dateStr: string): string {
   });
 }
 
-export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiStatsPageProps) {
+export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisabled = false }: KpiStatsPageProps) {
   const [weekStart, setWeekStart]     = useState<string>(defaultWeek);
   const [warSlot, setWarSlot]         = useState<1 | 2>(1);
   const [search, setSearch]           = useState('');
@@ -55,7 +57,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
   const { importing, results, bulkImport, reset: resetImport } = useKpiBulkImport();
   const [miniGamesOpen, setMiniGamesOpen] = useState(false);
   const [activeMiniGame, setActiveMiniGame] = useState<GameType>('snake');
-  const lb = useLeaderboard(activeMiniGame, currentUserId);
+  const lb = useLeaderboard(activeMiniGame, currentUserId, isDisabled);
 
   const isDouble      = useMemo(() => isDoubleWarWeek(weekStart), [weekStart]);
   // War 2 is stored as saturday+1 (Sunday slot) to keep the unique DB constraint intact
@@ -75,10 +77,12 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
     const q = search.toLowerCase();
     return profiles.filter(
       (p) =>
-        p.username.toLowerCase().includes(q) ||
-        (p.character_name ?? '').toLowerCase().includes(q),
+        p.id !== currentUserId && // own stats use the "My Stats" button
+        p.is_disabled !== true && // disabled members are excluded from KPI entry
+        (p.username.toLowerCase().includes(q) ||
+        (p.character_name ?? '').toLowerCase().includes(q)),
     );
-  }, [profiles, search]);
+  }, [profiles, search, currentUserId]);
 
   const handleSaved = () => {
     // Invalidate the current user's profile cache so Personal Card updates
@@ -103,22 +107,31 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Every member can enter their own stats */}
-          <button
-            onClick={() => setEntryTarget({ id: currentUserId, username: 'My Stats' })}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            📝 My Stats
-          </button>
+          {/* Disabled members cannot enter stats — show a notice instead */}
+          {isDisabled ? (
+            <span className="text-amber-300 text-xs bg-amber-900/30 border border-amber-700 rounded-lg px-3 py-2">
+              🚫 Account disabled — stats are view-only
+            </span>
+          ) : (
+            <>
+              {/* Every member can enter their own stats */}
+              <button
+                onClick={() => setEntryTarget({ id: currentUserId, username: 'My Stats' })}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                📝 My Stats
+              </button>
 
-          {/* Managers and super managers can enter stats for any member */}
-          {(isManager || isSuperManager) && (
-            <button
-              onClick={() => setPickerOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              + Enter Stats
-            </button>
+              {/* Managers and super managers can enter stats for any member */}
+              {(isManager || isSuperManager) && (
+                <button
+                  onClick={() => setPickerOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  + Enter Stats
+                </button>
+              )}
+            </>
           )}
 
           {/* Super manager: Excel tools */}
@@ -144,13 +157,15 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager }: KpiSt
             </>
           )}
 
-          {/* 🎮 Mini Games */}
-          <button
-            onClick={() => setMiniGamesOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-purple-900/40 transition-all hover:scale-105 active:scale-95"
-          >
-            🎮 Mini Games
-          </button>
+          {/* 🎮 Mini Games — disabled members cannot interact */}
+          {!isDisabled && (
+            <button
+              onClick={() => setMiniGamesOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-purple-900/40 transition-all hover:scale-105 active:scale-95"
+            >
+              🎮 Mini Games
+            </button>
+          )}
         </div>
       </div>
 

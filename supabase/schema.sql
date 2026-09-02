@@ -1663,7 +1663,8 @@ begin
   end if;
 
   select admin_pin_hash into configured_pin_hash
-    from public.admin_runtime_config where singleton = true;
+    from public.admin_runtime_config
+    where singleton = true;
   if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
     raise exception 'Admin PIN is not configured';
   end if;
@@ -1703,4 +1704,67 @@ $$;
 grant execute on function public.grant_user_access() to authenticated;
 revoke execute on function public.grant_user_access() from public;
 revoke execute on function public.grant_user_access() from anon;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 27. MEMBER DISABLE STATUS
+--     A disabled member stays fully viewable in the app (roster, profile,
+--     attendance history) but cannot interact with anything (war/attendance
+--     selection, KPI entry, mini games) and is excluded from all
+--     client-side calculations (streaks, leaderboards, stats, counts).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+alter table public.profiles
+  add column if not exists is_disabled boolean not null default false;
+
+-- PIN-gated toggle so Admin Mode can disable/enable a member.
+-- Follows the same security model as set_management_level_with_pin (§ ADMIN PIN).
+drop function if exists public.set_member_disabled_with_pin;
+create or replace function public.set_member_disabled_with_pin(
+  target_user_id uuid,
+  next_disabled boolean,
+  provided_pin text
+)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  updated_profile     public.profiles;
+  configured_pin_hash text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select admin_pin_hash
+    into configured_pin_hash
+  from public.admin_runtime_config
+  where singleton = true;
+
+  if configured_pin_hash is null or btrim(configured_pin_hash) = '' then
+    raise exception 'Admin PIN is not configured in public.admin_runtime_config';
+  end if;
+
+  if encode(digest(provided_pin, 'sha256'), 'hex') <> configured_pin_hash then
+    raise exception 'Incorrect admin PIN';
+  end if;
+
+  update public.profiles
+  set is_disabled = next_disabled,
+      updated_at = now()
+  where id = target_user_id
+  returning * into updated_profile;
+
+  if updated_profile.id is null then
+    raise exception 'Profile not found';
+  end if;
+
+  return updated_profile;
+end;
+$$;
+
+grant execute on function public.set_member_disabled_with_pin(uuid, boolean, text) to authenticated;
+revoke execute on function public.set_member_disabled_with_pin(uuid, boolean, text) from public;
+revoke execute on function public.set_member_disabled_with_pin(uuid, boolean, text) from anon;
 

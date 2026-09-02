@@ -268,13 +268,18 @@ function AppContent() {
           </div>
           {/* Calendar stays mounted to preserve scroll position */}
           <div className={tab === 'calendar' ? '' : 'hidden'}>
-            <GuildCalendarPage isManagement={auth.profile.is_management} userId={auth.profile.id} />
+            <GuildCalendarPage
+              isManagement={auth.profile.is_management}
+              userId={auth.profile.id}
+              isDisabled={auth.profile.is_disabled === true}
+            />
           </div>
           {tab === 'kpi' && (
             <KpiStatsPage
               currentUserId={auth.profile.id}
               isSuperManager={auth.profile.is_super_manager ?? false}
               isManager={auth.profile.is_management ?? false}
+              isDisabled={auth.profile.is_disabled === true}
             />
           )}
         </main>

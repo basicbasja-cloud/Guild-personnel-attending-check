@@ -31,22 +31,33 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
 
   const resolve = (a: Attendance) => a.profile ?? profileById.get(a.user_id);
 
+  // Disabled members stay viewable but are excluded from all counts/calculations.
+  const isDisabledRow = (a: Attendance) => {
+    const p = resolve(a);
+    return p?.is_disabled === true;
+  };
+  const disabledAttendanceRows = attendances.filter(isDisabledRow);
+  const countedAttendances = attendances.filter((a) => !isDisabledRow(a));
+
   const byStatus = {
-    join: attendances.filter((a) => a.status === 'join'),
-    maybe: attendances.filter((a) => a.status === 'maybe'),
-    not_join: attendances.filter((a) => a.status === 'not_join'),
+    join: countedAttendances.filter((a) => a.status === 'join'),
+    maybe: countedAttendances.filter((a) => a.status === 'maybe'),
+    not_join: countedAttendances.filter((a) => a.status === 'not_join'),
   };
 
-  const respondedUserIds = new Set(attendances.map((a) => a.user_id));
-  const nonSelectProfiles = (allProfiles ?? []).filter((p) => !respondedUserIds.has(p.id));
+  const respondedUserIds = new Set(countedAttendances.map((a) => a.user_id));
+  const nonSelectProfiles = (allProfiles ?? []).filter(
+    (p) => !respondedUserIds.has(p.id) && p.is_disabled !== true
+  );
+  const disabledProfiles = (allProfiles ?? []).filter((p) => p.is_disabled === true);
 
   const weekLabel = format(new Date(weekStartStr + 'T00:00:00'), "EEEE MMM dd, yyyy");
-  const totalMembers = profilesLoading ? null : (allProfiles?.length ?? attendances.length);
+  const totalMembers = profilesLoading ? null : ((allProfiles ?? []).filter((p) => p.is_disabled !== true).length || countedAttendances.length);
 
   const handleExport = () => {
     const statusLabel = (s: string) => s === 'join' ? 'Join' : s === 'not_join' ? "Can't Join" : 'Maybe';
     const rows: Record<string, unknown>[] = [
-      ...attendances.map((a) => {
+      ...countedAttendances.map((a) => {
         const p = resolve(a);
         return {
           Username: p?.username ?? '',
@@ -63,6 +74,13 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
         Status: 'Non-Select',
         'Set By': '',
       })),
+      ...disabledProfiles.map((p) => ({
+        Username: p.username,
+        'Character Name': p.character_name ?? '',
+        Class: p.character_class ?? '',
+        Status: 'Disabled',
+        'Set By': '',
+      })),
     ];
     downloadCsv(rows, `attendance_${weekStartStr}.csv`);
   };
@@ -73,7 +91,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
         <h3 className="text-white font-bold">Attendance — {weekLabel}</h3>
         <div className="flex items-center gap-2">
           <span className="text-slate-400 text-sm">
-            {attendances.length}/{totalMembers ?? '…'} responses
+            {countedAttendances.length}/{totalMembers ?? '…'} responses
           </span>
           <button
             onClick={handleExport}
@@ -169,7 +187,48 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
           </div>
         )}
 
-        {attendances.length === 0 && nonSelectProfiles.length === 0 && (
+        {disabledProfiles.length > 0 && (
+          <div className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span>🚫</span>
+              <span className="font-semibold text-sm text-slate-500">Disabled</span>
+              <span className="text-slate-600 text-xs">({disabledProfiles.length})</span>
+              <span className="text-slate-600 text-xs italic">· view only, excluded from counts</span>
+            </div>
+            <div className="space-y-2">
+              {disabledProfiles.map((p) => {
+                const att = disabledAttendanceRows.find((a) => a.user_id === p.id);
+                return (
+                  <div
+                    key={p.id}
+                    className={`flex items-center gap-3 p-2 rounded-lg border border-slate-800 bg-slate-900/60 opacity-60 ${onMemberClick ? 'cursor-pointer hover:opacity-90 transition-all' : ''}`}
+                    onClick={() => onMemberClick && onMemberClick(p.id)}
+                  >
+                    {p.avatar_url ? (
+                      <img src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0 grayscale" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-xs shrink-0 font-bold">
+                        {(p.username ?? '?').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-slate-300 text-sm font-medium truncate">
+                        {p.character_name ?? p.username ?? 'Unknown'}
+                      </p>
+                      <p className="text-slate-500 text-xs truncate">
+                        {p.username}
+                        {p.character_class ? ` · ${p.character_class}` : ''}
+                        {att ? ` · last response: ${att.status}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {countedAttendances.length === 0 && nonSelectProfiles.length === 0 && (
           <div className="p-8 text-center text-slate-500">No responses yet for this week.</div>
         )}
       </div>

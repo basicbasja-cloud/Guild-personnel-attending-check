@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useKpiBoard } from '../../hooks/useKpiBoard';
+import { useDisabledUserIds } from '../../hooks/useAllProfiles';
 import { KPI_BOARDS, getKpiRoleShortLabel, formatKpiNumber } from '../../constants/kpi';
 import { downloadCsv } from '../../lib/exportCsv';
 import type { KpiBoardRow, KpiMetricKey, KpiRoleTag } from '../../types';
@@ -56,7 +57,7 @@ interface KpiAllEntry {
   healing_done: number;
   ally_revives: number;
   resources_gathered: number;
-  profile: { username: string; character_name: string | null; character_class: string | null; is_test_account: boolean } | null;
+  profile: { username: string; character_name: string | null; character_class: string | null; is_test_account: boolean; is_disabled?: boolean } | null;
 }
 
 type ScoreKey = 'sc_overall' | 'sc_glass_cannon' | 'sc_game_changer' | 'sc_gatebreaker' | 'sc_logistics_master' | 'sc_resilient_guardian';
@@ -258,6 +259,8 @@ function BoardCard({
 export function KpiAwardsBoard({ isSuperManager, weekStart, currentUserId }: KpiAwardsBoardProps) {
   const { rows, loading, error, refresh } = useKpiBoard(weekStart);
   const hasData = rows.length > 0;
+  // Disabled members are excluded from all board/award calculations (view only).
+  const disabledIds = useDisabledUserIds();
 
   // Super manager: fetch all raw entries for the selected week
   const [allEntries, setAllEntries]           = useState<KpiAllEntry[]>([]);
@@ -328,8 +331,10 @@ export function KpiAwardsBoard({ isSuperManager, weekStart, currentUserId }: Kpi
   }, [weekStart, isSuperManager]);
 
   const sortedEntries = useMemo(() => {
+    // Disabled members stay viewable but are excluded from all award calculations.
+    const disabledUserIds = new Set(disabledIds);
     return [...allEntries]
-      .filter(e => !e.profile?.is_test_account)
+      .filter(e => !e.profile?.is_test_account && !disabledUserIds.has(e.user_id))
       .sort((a, b) => {
       let av: number | string = 0, bv: number | string = 0;
       if (sortKey === 'name') {
@@ -346,7 +351,7 @@ export function KpiAwardsBoard({ isSuperManager, weekStart, currentUserId }: Kpi
       if (av > bv) return sortAsc ?  1 : -1;
       return 0;
     });
-  }, [allEntries, sortKey, sortAsc]);
+  }, [allEntries, sortKey, sortAsc, disabledIds]);
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) setSortAsc(a => !a);

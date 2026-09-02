@@ -1,3 +1,33 @@
+# Patch Notes — September 2, 2026
+
+---
+
+## For Guild Members & Officers
+
+### New Features — Member "Disabled" Status
+
+- **🚫 Disable instead of delete** — Admins can now **Disable** a member instead of deleting their account. A disabled member:
+  - **Stays fully viewable** — they still appear on the roster, attendance history, and their profile page.
+  - **Cannot interact with anything** — war status buttons, training responses, KPI stat entry, and mini games are all locked (a clear 🚫 notice explains why).
+  - **Is excluded from every calculation** — attendance counts, streak leaderboards, mini-game leaderboards, war party availability, KPI boards/awards, player stats dashboard, and Excel imports.
+- **🔧 How to toggle** — Admin Mode (6-digit PIN) → member list → **Disable / Enable** button. Disabling is fully reversible; no data is ever lost.
+- **📍 Where you'll see it** — A 🚫 **Disabled** badge appears next to the member's name in the header, admin list, and roster (shown grayed-out in a separate "Disabled" section on the attendance list).
+
+### For Technical People
+
+- **Schema**: `profiles.is_disabled boolean not null default false` added via `alter table ... add column if not exists` in `supabase/schema.sql` (§27). Run **`supabase/patch_member_disabled.sql`** in the SQL Editor for the live DB — it's idempotent.
+- **New RPC**: `set_member_disabled_with_pin(target_user_id uuid, next_disabled boolean, provided_pin text)` — security definer, PIN-gated (same model as `set_management_level_with_pin`), returns the updated profile row.
+- **Client gating**:
+  - `AttendancePage.tsx` / `TrainingAttendanceModal.tsx` — status buttons disabled + amber notice for disabled members.
+  - `OnBehalfSection.tsx` — disabled members removed from the "Set On Behalf" picker.
+  - `KpiStatsPage.tsx` — "My Stats", "+ Enter Stats" and "🎮 Mini Games" hidden; member picker filters disabled members; `useLeaderboard.saveScore` is a no-op when disabled.
+  - `ManagementPage.tsx` — disabled members excluded from available members, non-select list, and maybe counts (war builder).
+- **Calculation exclusions**: `useStreaks.ts` (leaderboard), `useLeaderboard.ts` (ranking), `useKpiBoard.ts` + `KpiAwardsBoard.tsx` (boards/awards via `useDisabledUserIds()`), `PlayerStatsDashboard.tsx` (`buildStats` + summary tab), `AttendanceList.tsx` (counts + CSV), `useKpiBulkImport.ts` (skips disabled rows with a clear message), `kpiExcel.ts` (template excludes disabled members).
+- **Cache helpers**: `useAllProfiles.ts` now selects `is_disabled`, and adds `isMemberDisabled()`, `useDisabledUserIds()`, `upsertProfileInCache()` for instant cross-page updates after a toggle.
+- **Defense in depth (optional but recommended)**: the KPI RPCs (`get_kpi_public_board`, `get_kpi_entries_with_profiles`, `get_kpi_profile`) exist only in the live DB — add `and p.is_disabled = false` to their profile joins so disabled members are excluded server-side too. Instructions are in `supabase/patch_member_disabled.sql`.
+
+---
+
 # Patch Notes — July 8, 2026
 
 ---

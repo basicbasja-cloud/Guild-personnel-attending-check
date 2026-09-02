@@ -19,7 +19,7 @@ interface UseLeaderboardResult {
   refresh: () => void;
 }
 
-export function useLeaderboard(gameType: GameType, currentUserId?: string): UseLeaderboardResult {
+export function useLeaderboard(gameType: GameType, currentUserId?: string, isDisabled = false): UseLeaderboardResult {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [myBest, setMyBest] = useState(0);
@@ -40,27 +40,43 @@ export function useLeaderboard(gameType: GameType, currentUserId?: string): UseL
       const scoreRows = (scoreData ?? []) as { user_id: string; username: string; score: number }[];
 
       // Fetch character names for all users in the leaderboard
+      // (also used to exclude disabled members from the ranking)
       const userIds = scoreRows.map((r) => r.user_id);
       let charMap = new Map<string, string | null>();
+      const disabledUserIds = new Set<string>();
       if (userIds.length > 0) {
-        const { data: profileData } = await supabase
+        let profileResult = await supabase
           .from('profiles')
-          .select('id, character_name')
+          .select('id, character_name, is_disabled')
           .in('id', userIds);
-        if (profileData) {
-          for (const p of profileData as { id: string; character_name: string | null }[]) {
+
+        // Graceful fallback if the is_disabled column doesn't exist yet
+        // (supabase/patch_member_disabled.sql not applied)
+        if (profileResult.error && (profileResult.error.message ?? '').includes('is_disabled')) {
+          profileResult = (await supabase
+            .from('profiles')
+            .select('id, character_name')
+            .in('id', userIds)) as typeof profileResult;
+        }
+
+        if (profileResult.data) {
+          for (const p of profileResult.data as { id: string; character_name: string | null; is_disabled?: boolean | null }[]) {
             charMap.set(p.id, p.character_name);
+            if (p.is_disabled === true) disabledUserIds.add(p.id);
           }
         }
       }
 
-      const ranked = scoreRows.map((r, i) => ({
-        user_id: r.user_id,
-        username: r.username,
-        character_name: charMap.get(r.user_id) ?? null,
-        score: r.score,
-        rank: i + 1,
-      }));
+      // Disabled members are viewable but never ranked
+      const ranked = scoreRows
+        .filter((r) => !disabledUserIds.has(r.user_id))
+        .map((r, i) => ({
+          user_id: r.user_id,
+          username: r.username,
+          character_name: charMap.get(r.user_id) ?? null,
+          score: r.score,
+          rank: i + 1,
+        }));
 
       setEntries(ranked);
 
@@ -83,6 +99,8 @@ export function useLeaderboard(gameType: GameType, currentUserId?: string): UseL
     username: string,
     score: number,
   ): Promise<boolean> => {
+    // Disabled members cannot interact — no score saving.
+    if (isDisabled) return false;
     try {
       const { error } = await supabase.rpc('upsert_mini_game_score', {
         p_user_id: userId,
@@ -100,7 +118,7 @@ export function useLeaderboard(gameType: GameType, currentUserId?: string): UseL
       console.error('[Leaderboard] save error:', e);
       return false;
     }
-  }, [gameType, fetchLeaderboard]);
+  }, [gameType, fetchLeaderboard, isDisabled]);
 
   return { entries, loading, myBest, saveScore, refresh: fetchLeaderboard };
 }

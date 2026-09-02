@@ -34,8 +34,10 @@ export function useKpiBulkImport(): UseKpiBulkImportResult {
 
       // Build a lookup: character_name or username → user_id
       // Prefer character_name match, fallback to username
+      // Disabled members are excluded — their rows will be reported as skipped.
       const profileMap = new Map<string, string>();
       for (const p of profiles) {
+        if (p.is_disabled === true) continue;
         if (p.character_name) {
           profileMap.set(p.character_name.toLowerCase().trim(), p.id);
         }
@@ -44,6 +46,11 @@ export function useKpiBulkImport(): UseKpiBulkImportResult {
           profileMap.set(p.username.toLowerCase().trim(), p.id);
         }
       }
+      const disabledNames = new Set(
+        profiles
+          .filter((p) => p.is_disabled === true)
+          .flatMap((p) => [p.username.toLowerCase().trim(), (p.character_name ?? '').toLowerCase().trim()])
+      );
 
       const result: BulkImportResult = {
         total: rows.length,
@@ -73,7 +80,9 @@ export function useKpiBulkImport(): UseKpiBulkImportResult {
           result.errors.push({
             row: row.rowNumber,
             characterName: row.characterName,
-            message: `User not found for "${row.characterName}". Check the name matches a guild member's character name or username.`,
+            message: disabledNames.has(lookupKey)
+              ? `"${row.characterName}" is currently disabled — entry skipped.`
+              : `User not found for "${row.characterName}". Check the name matches a guild member's character name or username.`,
           });
           continue;
         }

@@ -78,19 +78,25 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     }
   }
 
+  // Disabled members are excluded from war building: they never appear as
+  // available, non-select, or assignable members (but remain on the roster).
   const availableMembers = weekAttendances
     .filter((a) => (a.status === 'join' || a.status === 'maybe') && !assignedUserIds.has(a.user_id))
+    .filter((a) => a.profile?.is_disabled !== true)
     .map((a) => a.profile)
     .filter((p): p is Profile => !!p);
 
   const respondedUserIds = new Set(weekAttendances.map((a) => a.user_id));
   const nonSelectProfiles = allProfiles.filter(
-    (p) => !respondedUserIds.has(p.id) && !assignedUserIds.has(p.id)
+    (p) =>
+      !respondedUserIds.has(p.id) &&
+      !assignedUserIds.has(p.id) &&
+      p.is_disabled !== true
   );
 
   const maybeUserIds = new Set(
     weekAttendances
-      .filter((a) => a.status === 'maybe')
+      .filter((a) => a.status === 'maybe' && a.profile?.is_disabled !== true)
       .map((a) => a.user_id)
   );
 

@@ -198,6 +198,11 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
               GM
             </span>
           ) : null}
+          {profile.is_disabled === true ? (
+            <span className="bg-slate-700 text-slate-200 text-xs px-2 py-0.5 rounded-full font-medium border border-slate-500">
+              🚫 Disabled
+            </span>
+          ) : null}
           <button
             onClick={onSignOut}
             className="text-slate-400 hover:text-white text-xs sm:text-sm px-2 sm:px-3 py-2 sm:py-1.5 rounded-lg hover:bg-slate-700 transition-colors touch-manipulation"

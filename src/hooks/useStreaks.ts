@@ -107,21 +107,33 @@ async function fetchStreak(userId: string): Promise<StreakData> {
 
 async function fetchLeaderboard(): Promise<StreakLeaderboardEntry[]> {
   // Get all users who have joined at least once
-  const { data, error } = await supabase
+  let result = await supabase
     .from('attendance')
-    .select('user_id, week_start, status, profile:profiles!user_id(username, character_name)')
+    .select('user_id, week_start, status, profile:profiles!user_id(username, character_name, is_disabled)')
     .eq('status', 'join')
     .order('week_start', { ascending: false });
 
+  // Graceful fallback if the is_disabled column doesn't exist yet
+  // (supabase/patch_member_disabled.sql not applied)
+  if (result.error && (result.error.message ?? '').includes('is_disabled')) {
+    result = (await supabase
+      .from('attendance')
+      .select('user_id, week_start, status, profile:profiles!user_id(username, character_name)')
+      .eq('status', 'join')
+      .order('week_start', { ascending: false })) as typeof result;
+  }
+
+  const { data, error } = result;
   if (error) throw error;
 
-  // Group by user
+  // Group by user (disabled members are excluded from streak calculations)
   const userMap = new Map<string, { weeks: string[]; username: string; character_name: string | null }>();
   for (const row of data as unknown as {
     user_id: string;
     week_start: string;
-    profile: { username: string; character_name: string | null } | null;
+    profile: { username: string; character_name: string | null; is_disabled: boolean | null } | null;
   }[]) {
+    if (row.profile?.is_disabled === true) continue;
     if (!userMap.has(row.user_id)) {
       userMap.set(row.user_id, {
         weeks: [],

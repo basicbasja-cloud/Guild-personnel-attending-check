@@ -180,6 +180,9 @@ function buildStats(profiles: Profile[], rows: { user_id: string; week_start: st
   const programStart = new Date(PROGRAM_START_DATE + 'T00:00:00');
   const now = getUpcomingSaturday(new Date());
 
+  // Disabled members are excluded from all stats calculations.
+  const activeProfiles = profiles.filter((p) => p.is_disabled !== true);
+
   // Only count rows from program start date onwards
   const eligibleRows = rows.filter((r) => r.week_start >= PROGRAM_START_DATE);
 
@@ -201,7 +204,7 @@ function buildStats(profiles: Profile[], rows: { user_id: string; week_start: st
     }
   }
 
-  return profiles.map((p) => {
+  return activeProfiles.map((p) => {
     const s = statusByUser.get(p.id) ?? { join: 0, maybe: 0, not_join: 0 };
     const firstWk = firstWeekByUser.get(p.id);
 
@@ -266,7 +269,9 @@ export function PlayerStatsDashboard() {
       // Combine war + training into a single summary with weighted active score
       const warMap = new Map(warStatList.map((s) => [s.profile.id, s]));
       const trainingMap = new Map(trainingStatList.map((s) => [s.profile.id, s]));
-      return profiles.map((p) => {
+      return profiles
+        .filter((p) => p.is_disabled !== true)
+        .map((p) => {
         const w = warMap.get(p.id);
         const t = trainingMap.get(p.id);
         const warRate = w?.attendance_rate ?? 0;

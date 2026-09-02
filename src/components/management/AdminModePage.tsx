@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Profile } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
-import { evictProfileFromCache } from '../../hooks/useAllProfiles';
+import { evictProfileFromCache, upsertProfileInCache } from '../../hooks/useAllProfiles';
 import { useAccessKeys } from '../../hooks/useAccessKeys';
 
 interface AdminModePageProps {
@@ -49,6 +49,7 @@ export function AdminModePage({ userId }: AdminModePageProps) {
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
+  const [togglingDisabledId, setTogglingDisabledId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
@@ -199,6 +200,32 @@ export function AdminModePage({ userId }: AdminModePageProps) {
     setSavingRoleId(null);
   };
 
+  // Disable/enable a member: they stay viewable everywhere but cannot interact
+  // and are excluded from all calculations.
+  const handleToggleDisabled = async (targetProfile: Profile) => {
+    setTogglingDisabledId(targetProfile.id);
+    setAdminError(null);
+
+    const { data, error } = await supabase.rpc('set_member_disabled_with_pin', {
+      target_user_id: targetProfile.id,
+      next_disabled: !(targetProfile.is_disabled === true),
+      provided_pin: storedPin,
+    });
+
+    if (error) {
+      setAdminError(error.message);
+      setTogglingDisabledId(null);
+      return;
+    }
+
+    const updated = data as Profile | null;
+    if (updated) {
+      upsertProfileInCache(updated);
+      setProfiles((prev) => prev.map((p) => (p.id === targetProfile.id ? { ...p, ...updated } : p)));
+    }
+    setTogglingDisabledId(null);
+  };
+
   const handleAddClass = async () => {
     const className = newClassName.trim();
     const colorHex = newClassColor.trim();
@@ -345,7 +372,14 @@ export function AdminModePage({ userId }: AdminModePageProps) {
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
-                  <p className="text-white font-medium truncate">{listedProfile.username}</p>
+                  <p className="text-white font-medium truncate">
+                    {listedProfile.username}
+                    {listedProfile.is_disabled === true && (
+                      <span className="ml-2 text-xs text-slate-300 bg-slate-700 border border-slate-600 rounded-full px-2 py-0.5 align-middle">
+                        🚫 Disabled
+                      </span>
+                    )}
+                  </p>
                   <p className="text-slate-400 text-sm truncate">
                     {listedProfile.character_name || 'No character name set'}
                     {listedProfile.character_class ? ` · ${listedProfile.character_class}` : ''}
@@ -358,6 +392,26 @@ export function AdminModePage({ userId }: AdminModePageProps) {
                       Current account
                     </span>
                   )}
+                  <button
+                    onClick={() => handleToggleDisabled(listedProfile)}
+                    disabled={togglingDisabledId === listedProfile.id}
+                    className={`text-xs px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+                      listedProfile.is_disabled === true
+                        ? 'bg-emerald-900/40 border-emerald-800 text-emerald-300 hover:bg-emerald-800/60'
+                        : 'bg-amber-900/40 border-amber-800 text-amber-300 hover:bg-amber-800/60'
+                    }`}
+                    title={
+                      listedProfile.is_disabled === true
+                        ? 'Re-enable this member'
+                        : 'Disable this member: view-only, excluded from all calculations'
+                    }
+                  >
+                    {togglingDisabledId === listedProfile.id
+                      ? 'Saving…'
+                      : listedProfile.is_disabled === true
+                        ? 'Enable'
+                        : 'Disable'}
+                  </button>
                   <select
                     value={getRole(listedProfile)}
                     onChange={(event) => handleRoleChange(listedProfile, event.target.value as RoleOption)}

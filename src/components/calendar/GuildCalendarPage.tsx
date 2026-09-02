@@ -378,9 +378,11 @@ function EventModal({ initial, defaultDate, userId, isManagement, onSave, onDele
 export interface GuildCalendarPageProps {
   isManagement: boolean;
   userId?: string;
+  /** Disabled members are view-only: they cannot respond to training attendance. */
+  isDisabled?: boolean;
 }
 
-export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPageProps) {
+export function GuildCalendarPage({ isManagement, userId = '', isDisabled = false }: GuildCalendarPageProps) {
   const { events, loading, createEvent, updateEvent, updateEventDate, deleteEvent } = useGuildEvents();
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [modalOpen, setModalOpen]       = useState(false);
@@ -627,6 +629,7 @@ export function GuildCalendarPage({ isManagement, userId = '' }: GuildCalendarPa
           event={trainingEvent}
           currentUserId={userId}
           isManagement={isManagement}
+          isDisabled={isDisabled}
           onClose={handleTrainingClose}
           onManageSetup={() => {
             setTrainingAttModalOpen(false);

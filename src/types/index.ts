@@ -15,6 +15,8 @@ export interface Profile {
   is_admin: boolean;
   is_super_manager: boolean;
   is_test_account: boolean;
+  /** Disabled members are viewable everywhere but cannot interact and are excluded from all calculations. */
+  is_disabled: boolean;
   access_granted: boolean;
   logo_color: string | null;
   notes: string | null;

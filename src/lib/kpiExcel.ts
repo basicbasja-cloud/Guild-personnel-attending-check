@@ -51,9 +51,10 @@ const ROLE_TAG_LIST = KPI_ROLES.map((r) => r.tag);
  * @returns Workbook as ArrayBuffer ready for download
  */
 export function generateTemplateWorkbook(members: Profile[]): ArrayBuffer {
-  // Sort members by character name (or username fallback), exclude test accounts
+  // Sort members by character name (or username fallback),
+  // exclude test accounts and disabled members
   const sorted = [...members]
-    .filter((m) => !m.is_test_account)
+    .filter((m) => !m.is_test_account && m.is_disabled !== true)
     .sort((a, b) => {
       const nameA = (a.character_name || a.username).toLowerCase();
       const nameB = (b.character_name || b.username).toLowerCase();

@@ -8,6 +8,8 @@ interface TrainingAttendanceModalProps {
   event: GuildEvent;
   currentUserId: string;
   isManagement: boolean;
+  /** Disabled members are view-only inside this modal. */
+  isDisabled?: boolean;
   onClose: () => void;
   onManageSetup?: () => void;
   onEditEvent?: () => void;
@@ -17,6 +19,7 @@ export function TrainingAttendanceModal({
   event,
   currentUserId,
   isManagement,
+  isDisabled = false,
   onClose,
   onManageSetup,
   onEditEvent,
@@ -98,6 +101,11 @@ export function TrainingAttendanceModal({
           {/* Status buttons */}
           <div>
             <h3 className="text-white font-semibold text-sm mb-3">Your Response</h3>
+            {isDisabled && (
+              <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 mb-3 text-amber-200 text-xs">
+                🚫 Your account is currently <strong>Disabled</strong> — you can view responses but cannot set one.
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               {(Object.entries(STATUS_CONFIG) as [AttendanceStatus, (typeof STATUS_CONFIG)[AttendanceStatus]][]).map(
                 ([status, cfg]) => {
@@ -106,7 +114,7 @@ export function TrainingAttendanceModal({
                     <button
                       key={status}
                       onClick={() => setStatus(status)}
-                      disabled={submitting}
+                      disabled={submitting || isDisabled}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all
                         ${selected ? `${cfg.bg} ${cfg.border}` : 'bg-slate-800 border-slate-600 hover:border-slate-500'}
                         disabled:opacity-50 disabled:cursor-not-allowed`}

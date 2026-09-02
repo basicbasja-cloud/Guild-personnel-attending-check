@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { getUpcomingSaturday } from '../lib/week';
 import { formatISO } from 'date-fns';
+import { useDisabledUserIds } from './useAllProfiles';
 import type { KpiBoardRow } from '../types';
 
 // ── In-memory + localStorage cache ───────────────────────────────────────────
@@ -132,5 +133,12 @@ export function useKpiBoard(weekStart: string): UseKpiBoardResult {
     return () => { cancelled = true; };
   }, [weekStart, tick]);
 
-  return { rows, loading, error, refresh };
+  // Disabled members stay viewable but are excluded from board calculations.
+  const disabledUserIds = useDisabledUserIds();
+  const filteredRows = useMemo(
+    () => rows.filter((r) => !disabledUserIds.has(r.user_id)),
+    [rows, disabledUserIds]
+  );
+
+  return { rows: filteredRows, loading, error, refresh };
 }

@@ -36,7 +36,11 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
       ? [...classCatalog, { name: charClass, color_hex: selectedClassColor }]
       : classCatalog;
 
+  // Disabled members are view-only: they cannot change war/attendance status.
+  const isDisabledMember = profile.is_disabled === true;
+
   const handleStatusSelect = async (status: AttendanceStatus) => {
+    if (isDisabledMember) return;
     await setStatus(status);
   };
 
@@ -85,6 +89,13 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
         <h2 className="text-white font-bold text-lg sm:text-xl mb-1">Guild War Attendance</h2>
         <p className="text-slate-400 text-sm mb-6">Will you participate in this week's guild war?</p>
 
+        {isDisabledMember && (
+          <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 mb-4 text-amber-200 text-sm">
+            🚫 Your account is currently <strong>Disabled</strong>. You can view the guild board but cannot set your war status.
+            Contact a manager if this is a mistake.
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-900/40 border border-red-700 rounded-lg p-3 mb-4 text-red-300 text-sm">
             {error}
@@ -99,7 +110,7 @@ export function AttendancePage({ profile, onUpdateProfile }: AttendancePageProps
                 <button
                   key={status}
                   onClick={() => handleStatusSelect(status)}
-                  disabled={submitting}
+                  disabled={submitting || isDisabledMember}
                   className={`flex flex-col items-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl border-2 transition-all min-h-[80px] sm:min-h-[96px] touch-manipulation
                     ${selected ? `${cfg.bg} ${cfg.border}` : 'bg-slate-800 border-slate-600 hover:border-slate-500'}
                     disabled:opacity-50 disabled:cursor-not-allowed`}

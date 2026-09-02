@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { withDbTiming } from '../lib/dbTiming';
 import type { Profile } from '../types';
@@ -31,17 +31,35 @@ function writeLocalCache(profiles: Profile[]) {
   }
 }
 
+const PROFILE_SELECT_COLUMNS =
+  'id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,is_disabled,created_at';
+// Fallback select for databases that haven't run supabase/patch_member_disabled.sql yet
+const PROFILE_SELECT_COLUMNS_LEGACY = PROFILE_SELECT_COLUMNS.replace(',is_disabled', '');
+
 async function fetchAndCache(): Promise<Profile[]> {
-  const { data, error } = await withDbTiming('GET', 'profiles.all', () =>
+  let result = await withDbTiming('GET', 'profiles.all', () =>
     supabase
       .from('profiles')
-      .select(
-        'id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at'
-      )
+      .select(PROFILE_SELECT_COLUMNS)
       .order('username')
   );
-  if (error) throw error;
-  const profiles = (data as Profile[] | null) ?? [];
+
+  // Graceful fallback: if the is_disabled column doesn't exist yet (patch not
+  // applied), retry without it so the app keeps working — every member is
+  // then treated as enabled until the SQL patch is run.
+  const errMsg = (result.error as { message?: string } | null)?.message ?? '';
+  if (result.error && errMsg.includes('is_disabled')) {
+    console.warn('[useAllProfiles] is_disabled column missing — run supabase/patch_member_disabled.sql. Falling back to legacy select.');
+    result = (await withDbTiming('GET', 'profiles.all.legacy', () =>
+      supabase
+        .from('profiles')
+        .select(PROFILE_SELECT_COLUMNS_LEGACY)
+        .order('username')
+    )) as typeof result;
+  }
+
+  if (result.error) throw result.error;
+  const profiles = (result.data as Profile[] | null) ?? [];
   memCache = { at: Date.now(), profiles };
   writeLocalCache(profiles);
   return profiles;
@@ -62,6 +80,31 @@ export function evictProfileFromCache(userId: string) {
       const filtered = local.profiles.filter((p) => p.id !== userId);
       memCache = { at: local.at, profiles: filtered };
       writeLocalCache(filtered);
+    }
+  }
+}
+
+/**
+ * Update a single profile in both in-memory and localStorage caches.
+ * Call this after a successful profile mutation (role change, disable toggle, etc.)
+ * so other pages update immediately.
+ */
+export function upsertProfileInCache(updated: Profile) {
+  const apply = (list: Profile[]) => {
+    const idx = list.findIndex((p) => p.id === updated.id);
+    if (idx === -1) return list;
+    const next = [...list];
+    next[idx] = { ...next[idx], ...updated };
+    return next;
+  };
+  if (memCache) {
+    memCache = { at: memCache.at, profiles: apply(memCache.profiles) };
+    writeLocalCache(memCache.profiles);
+  } else {
+    const local = readLocalCache();
+    if (local) {
+      memCache = { at: local.at, profiles: apply(local.profiles) };
+      writeLocalCache(memCache.profiles);
     }
   }
 }
@@ -122,4 +165,21 @@ export function useAllProfiles(enabled = true) {
   }, [enabled]);
 
   return { profiles, loading };
+}
+
+/** Guard for old cached rows that may be missing the is_disabled flag. */
+export function isMemberDisabled(p: Pick<Profile, 'is_disabled'> | null | undefined): boolean {
+  return p?.is_disabled === true;
+}
+
+/**
+ * Set of user_ids currently marked as disabled.
+ * Shares the useAllProfiles cache, so it's free wherever profiles are loaded.
+ */
+export function useDisabledUserIds(enabled = true): Set<string> {
+  const { profiles } = useAllProfiles(enabled);
+  return useMemo(
+    () => new Set(profiles.filter(isMemberDisabled).map((p) => p.id)),
+    [profiles]
+  );
 }
