@@ -20,7 +20,7 @@ import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
 import { exportElementAsPng } from '../../lib/warExport';
 import type { Profile, WarPartyMember } from '../../types';
-import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS } from '../../types';
+import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS, MAX_PARTIES_PER_GROUP } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
 import { downloadCsv } from '../../lib/exportCsv';
 import { TitleManagerModal } from '../titles/TitleManagerModal';
@@ -103,6 +103,21 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   const activeAssignedCount = war.data
     ? war.data.groups.reduce((sum, g) => sum + g.parties.reduce((s, p) => s + p.members.length, 0), 0)
     : 0;
+
+  // Groups sorted by group_number — the single source of truth for display
+  // order and for the global (sequential) party numbering. Using the sorted
+  // index (instead of group_number - 1) keeps Party 1..N sequential even
+  // after a middle group is deleted (e.g. groups 1,3 → offsets 0,5).
+  const sortedGroups = useMemo(() => {
+    if (!war.data) return [];
+    return [...war.data.groups].sort((a, b) => a.group.group_number - b.group.group_number);
+  }, [war.data]);
+
+  const partyOffsetByGroupId = useMemo(() => {
+    const map = new Map<string, number>();
+    sortedGroups.forEach((g, idx) => map.set(g.group.id, idx * MAX_PARTIES_PER_GROUP));
+    return map;
+  }, [sortedGroups]);
 
   // Class distribution across all assigned members (parties + substitutes)
   const classDistribution = useMemo(() => {
@@ -284,9 +299,10 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
   const handleExportWarSetup = () => {
     if (!war.data) return;
     const rows: Record<string, unknown>[] = [];
-    for (const g of war.data.groups) {
+    for (const g of sortedGroups) {
+      const offset = partyOffsetByGroupId.get(g.group.id) ?? 0;
       for (const p of g.parties) {
-        const partyDisplay = p.party.party_number + (g.group.group_number - 1) * 5;
+        const partyDisplay = p.party.party_number + offset;
         for (const m of p.members) {
           rows.push({
             Group: g.group.name,
@@ -338,6 +354,27 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     }
     war.swapEntireParty(war.data.setup.id, swappingPartyId, partyId);
     setSwappingPartyId(null);
+  };
+
+  // ── Custom group count (min 2 groups) ──────────────────────────────
+  // Next group_number = max existing + 1; name follows Group A/B/C… scheme.
+  const handleAddGroup = async () => {
+    if (!canEdit || !war.data || war.loading) return;
+    const maxNumber = sortedGroups.reduce((max, g) => Math.max(max, g.group.group_number), 0);
+    const nextNumber = maxNumber + 1;
+    const letter = String.fromCharCode('A'.charCodeAt(0) + nextNumber - 1);
+    await war.addGroup(war.data.setup.id, nextNumber, `Group ${letter}`);
+  };
+
+  const handleDeleteGroup = async (groupId: string, groupName: string, memberCount: number) => {
+    if (!canEdit || !war.data) return;
+    if (sortedGroups.length <= 2) return; // UI guard (hook has a defensive guard too)
+    const suffix = memberCount > 0
+      ? ` ${memberCount} assigned member${memberCount === 1 ? '' : 's'} will return to Available.`
+      : ' It is empty.';
+    const confirmed = window.confirm(`Delete ${groupName}?${suffix}`);
+    if (!confirmed) return;
+    await war.deleteGroup(groupId);
   };
 
   return (
@@ -414,6 +451,16 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
             >
               🌟 Nominate MotW
             </button>
+            {war.data && (
+              <button
+                onClick={handleAddGroup}
+                disabled={war.loading}
+                className="text-xs px-3 py-1.5 rounded-lg bg-indigo-700 border border-indigo-600 text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+                title="Add a new group (Group C, D, …) with 5 empty parties"
+              >
+                ➕ Add Group
+              </button>
+            )}
           </div>
         )}
 
@@ -467,16 +514,18 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
             {/* Right: Groups + Substitutes */}
             <div ref={warSetupRef} className="flex-1 space-y-6 min-w-0">
-              {war.data.groups.map((g) => (
+              {sortedGroups.map((g) => (
                 <GroupBoard
                   key={g.group.id}
                   groupData={g}
                   onRemoveMember={handleRemoveMember}
                   maybeUserIds={maybeUserIds}
                   canEdit={canEdit}
-                  partyNumberOffset={(g.group.group_number - 1) * 5}
+                  partyNumberOffset={partyOffsetByGroupId.get(g.group.id) ?? 0}
                   swappingPartyId={swappingPartyId}
                   onPartySwapClick={handlePartySwapClick}
+                  onDeleteGroup={handleDeleteGroup}
+                  canDeleteGroup={canEdit && sortedGroups.length > 2}
                 />
               ))}
 

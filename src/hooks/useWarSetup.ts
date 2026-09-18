@@ -434,6 +434,14 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
   };
 
   const deleteGroup = async (groupId: string) => {
+    // Defensive guard: a war setup must always keep at least 2 groups.
+    // The UI hides the Delete button at 2 groups, but this protects
+    // against direct calls / race conditions.
+    if (data && data.groups.length <= 2) {
+      setError('A war setup must keep at least 2 groups.');
+      return;
+    }
+
     const { error: err } = await withDbTiming(
       'DELETE',
       `war_groups.delete group=${groupId}`,

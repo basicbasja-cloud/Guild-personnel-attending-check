@@ -13,9 +13,11 @@ interface GroupBoardProps {
   partyNumberOffset?: number;
   swappingPartyId?: string | null;
   onPartySwapClick?: (partyId: string) => void;
+  onDeleteGroup?: (groupId: string, groupName: string, memberCount: number) => void;
+  canDeleteGroup?: boolean;
 }
 
-export function GroupBoard({ groupData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0, swappingPartyId, onPartySwapClick }: GroupBoardProps) {
+export function GroupBoard({ groupData, onRemoveMember, maybeUserIds, canEdit, partyNumberOffset = 0, swappingPartyId, onPartySwapClick, onDeleteGroup, canDeleteGroup = false }: GroupBoardProps) {
   const { group, parties } = groupData;
   const totalMembers = parties.reduce((sum, p) => sum + p.members.length, 0);
 
@@ -28,14 +30,25 @@ export function GroupBoard({ groupData, onRemoveMember, maybeUserIds, canEdit, p
           </div>
           <h3 className="text-white font-bold">{group.name}</h3>
         </div>
-        <div
-          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            totalMembers >= MAX_MEMBERS_PER_GROUP
-              ? 'bg-red-900/60 text-red-300'
-              : 'bg-slate-700 text-slate-400'
-          }`}
-        >
-          {totalMembers}/{MAX_MEMBERS_PER_GROUP}
+        <div className="flex items-center gap-2">
+          <div
+            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              totalMembers >= MAX_MEMBERS_PER_GROUP
+                ? 'bg-red-900/60 text-red-300'
+                : 'bg-slate-700 text-slate-400'
+            }`}
+          >
+            {totalMembers}/{MAX_MEMBERS_PER_GROUP}
+          </div>
+          {canEdit && canDeleteGroup && onDeleteGroup && (
+            <button
+              onClick={() => onDeleteGroup(group.id, group.name, totalMembers)}
+              className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 hover:bg-red-900/60 hover:text-red-300 transition-colors"
+              title={`Delete ${group.name} (members return to Available)`}
+            >
+              Delete
+            </button>
+          )}
         </div>
 
       </div>
