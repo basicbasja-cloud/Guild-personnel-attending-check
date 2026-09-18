@@ -137,33 +137,37 @@ class SyncEngineClass {
       }
 
       for (const [setupId, mutations] of bySetup) {
-        const allUserIds = mutations.map((m) => m.userId);
+        const removes = mutations.filter((m) => m.op === 'remove');
         const assigns = mutations.filter((m) => m.op === 'assign');
 
-        // Step 1: delete all current slots for affected users in this setup
-        const { error: delErr } = await supabase
-          .from('war_party_members')
-          .delete()
-          .eq('war_setup_id', setupId)
-          .in('user_id', allUserIds);
-
-        if (delErr) throw delErr;
-
-        // Step 2: re-insert final positions for assign operations
-        if (assigns.length > 0) {
-          const { error: insErr } = await supabase
+        // Deletes are only needed for explicit removals. Assignments use the
+        // existing (war_setup_id, user_id) key so moves become one UPDATE or
+        // INSERT instead of a delete followed by an insert.
+        if (removes.length > 0) {
+          const { error: delErr } = await supabase
             .from('war_party_members')
-            .insert(
+            .delete()
+            .eq('war_setup_id', setupId)
+            .in('user_id', removes.map((m) => m.userId));
+
+          if (delErr) throw delErr;
+        }
+
+        if (assigns.length > 0) {
+          const { error: upsertErr } = await supabase
+            .from('war_party_members')
+            .upsert(
               assigns.map((m) => ({
                 war_setup_id: m.setupId,
                 user_id: m.userId,
                 party_id: m.partyId,
                 position: m.position,
                 is_substitute: m.isSubstitute,
-              }))
+              })),
+              { onConflict: 'war_setup_id,user_id' }
             );
 
-          if (insErr) throw insErr;
+          if (upsertErr) throw upsertErr;
         }
       }
 

@@ -1499,6 +1499,8 @@ create policy "reactions_delete_own"
 -- Index for quick lookups
 create index if not exists idx_reactions_announcement
   on public.announcement_reactions (announcement_id);
+create index if not exists idx_reactions_user_id
+  on public.announcement_reactions (user_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 26. ACCESS KEY SYSTEM
@@ -1519,6 +1521,9 @@ create table if not exists public.access_keys (
   is_active   boolean not null default true,
   notes       text
 );
+
+create index if not exists idx_access_keys_created_by
+  on public.access_keys (created_by);
 
 alter table public.access_keys enable row level security;
 

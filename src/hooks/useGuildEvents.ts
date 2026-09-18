@@ -12,6 +12,7 @@ interface EventsCache {
 
 // In-memory layer — avoids localStorage JSON parse on every hook mount
 let memCache: EventsCache | null = null;
+let activeFetch: Promise<GuildEvent[]> | null = null;
 
 function readCache(): EventsCache | null {
   try {
@@ -29,20 +30,38 @@ function writeCache(events: GuildEvent[]) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(entry)); } catch { /**/ }
 }
 
+async function fetchEvents(): Promise<GuildEvent[]> {
+  if (activeFetch) return activeFetch;
+
+  const request = (async () => {
+    const { data, error } = await supabase
+      .from('guild_events')
+      .select('*')
+      .order('event_date', { ascending: true, nullsFirst: false });
+    if (error) throw error;
+    const events = (data ?? []) as GuildEvent[];
+    writeCache(events);
+    return events;
+  })();
+
+  activeFetch = request;
+  try {
+    return await request;
+  } finally {
+    if (activeFetch === request) activeFetch = null;
+  }
+}
+
 /** Preload called in App.tsx as soon as the user authenticates */
 export async function preloadGuildEvents() {
   if (memCache && Date.now() - memCache.at < CACHE_TTL_MS) return;
   const cached = readCache();
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) { memCache = cached; return; }
-  const { data, error } = await supabase
-    .from('guild_events')
-    .select('*')
-    .order('event_date', { ascending: true, nullsFirst: false });
-  if (error) {
+  try {
+    await fetchEvents();
+  } catch (error) {
     console.error('[useGuildEvents] preload:', error);
-    return;
   }
-  if (data) writeCache(data as GuildEvent[]);
 }
 
 export interface UseGuildEventsReturn {
@@ -72,19 +91,13 @@ export function useGuildEvents(): UseGuildEventsReturn {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('guild_events')
-      .select('*')
-      .order('event_date', { ascending: true, nullsFirst: false });
-    setLoading(false);
-    if (error) {
-      console.error('[useGuildEvents] fetchAll:', error);
-      return;
-    }
-    if (data) {
-      const evs = data as GuildEvent[];
+    try {
+      const evs = await fetchEvents();
       setEvents(evs);
-      writeCache(evs);
+    } catch (error) {
+      console.error('[useGuildEvents] fetchAll:', error);
+    } finally {
+      setLoading(false);
     }
   }, []);
 

@@ -29,6 +29,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // In-memory hot cache — avoids JSON.parse on every mount after first load
 const hotCache = new Map<string, { at: number; data: WarSetupData }>();
+const activeLoads = new Map<string, Promise<WarSetupData | null>>();
 
 function cacheKey(weekStr: string, eventType: EventType, eventId?: string): string {
   if (eventType === 'training' && eventId) return `training_${eventId}`;
@@ -215,6 +216,27 @@ async function loadSetupData(
   return result;
 }
 
+// AppContent, the management page, and the preload path can all request the
+// same setup during login. Share that request instead of opening parallel DB
+// round-trips for the same cache key.
+async function loadSetupDataShared(
+  weekStartStr: string,
+  eventType: EventType = 'war',
+  eventId?: string
+): Promise<WarSetupData | null> {
+  const key = cacheKey(weekStartStr, eventType, eventId);
+  const existing = activeLoads.get(key);
+  if (existing) return existing;
+
+  const request = loadSetupData(weekStartStr, eventType, eventId);
+  activeLoads.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (activeLoads.get(key) === request) activeLoads.delete(key);
+  }
+}
+
 /**
  * Eagerly warm the war setup cache for the current week.
  * Call this right after login so the War Setup tab opens instantly.
@@ -223,7 +245,7 @@ export async function preloadWarSetup(weekStart?: Date): Promise<void> {
   const weekStartStr = formatISO(getUpcomingSaturday(weekStart ?? new Date()), { representation: 'date' });
   const cached = readCache(weekStartStr);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return;
-  await loadSetupData(weekStartStr).catch((err) => { console.error('[preloadWarSetup]', err); });
+  await loadSetupDataShared(weekStartStr).catch((err) => { console.error('[preloadWarSetup]', err); });
 }
 
 export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: string) {
@@ -243,7 +265,7 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
   const fetchSetup = useCallback(async () => {
     setError(null);
     try {
-      const result = await loadSetupData(weekStartStr, setupType, eventId);
+      const result = await loadSetupDataShared(weekStartStr, setupType, eventId);
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
@@ -260,7 +282,7 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
     } else {
       setLoading(true);
     }
-    loadSetupData(weekStartStr, setupType, eventId)
+    loadSetupDataShared(weekStartStr, setupType, eventId)
       .then((result) => { if (!cancelled) { setData(result); setLoading(false); } })
       .catch((e) => { if (!cancelled) { setError(e instanceof Error ? e.message : 'Unknown error'); setLoading(false); } });
     return () => { cancelled = true; };
@@ -279,7 +301,7 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
       refreshInFlight = true;
       pendingRefresh = false;
       try {
-        const result = await loadSetupData(weekStartStr, setupType, eventId);
+        const result = await loadSetupDataShared(weekStartStr, setupType, eventId);
         setData(result);
       } finally {
         refreshInFlight = false;

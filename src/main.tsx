@@ -94,12 +94,8 @@ if (!supabaseConfigError) {
     }
   }
 
-  // ── 3. In-app keepalive: ping every 4 minutes ──────────────────────────
-  const dbPing = () => { supabase.from('profiles').select('id').limit(1).then(() => {}); };
-  setInterval(dbPing, 4 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') dbPing();
-  });
+  // Database keepalive is handled by the scheduled deployment workflow.
+  // Avoid one timer and an extra query per open browser tab.
 }
 
 createRoot(document.getElementById('root')!).render(

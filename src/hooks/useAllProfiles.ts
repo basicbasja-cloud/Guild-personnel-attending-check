@@ -35,34 +35,46 @@ const PROFILE_SELECT_COLUMNS =
   'id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,is_disabled,created_at';
 // Fallback select for databases that haven't run supabase/patch_member_disabled.sql yet
 const PROFILE_SELECT_COLUMNS_LEGACY = PROFILE_SELECT_COLUMNS.replace(',is_disabled', '');
+let activeFetch: Promise<Profile[]> | null = null;
 
 async function fetchAndCache(): Promise<Profile[]> {
-  let result = await withDbTiming('GET', 'profiles.all', () =>
-    supabase
-      .from('profiles')
-      .select(PROFILE_SELECT_COLUMNS)
-      .order('username')
-  );
+  if (activeFetch) return activeFetch;
 
-  // Graceful fallback: if the is_disabled column doesn't exist yet (patch not
-  // applied), retry without it so the app keeps working — every member is
-  // then treated as enabled until the SQL patch is run.
-  const errMsg = (result.error as { message?: string } | null)?.message ?? '';
-  if (result.error && errMsg.includes('is_disabled')) {
-    console.warn('[useAllProfiles] is_disabled column missing — run supabase/patch_member_disabled.sql. Falling back to legacy select.');
-    result = (await withDbTiming('GET', 'profiles.all.legacy', () =>
+  const request = (async () => {
+    let result = await withDbTiming('GET', 'profiles.all', () =>
       supabase
         .from('profiles')
-        .select(PROFILE_SELECT_COLUMNS_LEGACY)
+        .select(PROFILE_SELECT_COLUMNS)
         .order('username')
-    )) as typeof result;
-  }
+    );
 
-  if (result.error) throw result.error;
-  const profiles = (result.data as Profile[] | null) ?? [];
-  memCache = { at: Date.now(), profiles };
-  writeLocalCache(profiles);
-  return profiles;
+    // Graceful fallback: if the is_disabled column doesn't exist yet (patch not
+    // applied), retry without it so the app keeps working — every member is
+    // then treated as enabled until the SQL patch is run.
+    const errMsg = (result.error as { message?: string } | null)?.message ?? '';
+    if (result.error && errMsg.includes('is_disabled')) {
+      console.warn('[useAllProfiles] is_disabled column missing — run supabase/patch_member_disabled.sql. Falling back to legacy select.');
+      result = (await withDbTiming('GET', 'profiles.all.legacy', () =>
+        supabase
+          .from('profiles')
+          .select(PROFILE_SELECT_COLUMNS_LEGACY)
+          .order('username')
+      )) as typeof result;
+    }
+
+    if (result.error) throw result.error;
+    const profiles = (result.data as Profile[] | null) ?? [];
+    memCache = { at: Date.now(), profiles };
+    writeLocalCache(profiles);
+    return profiles;
+  })();
+
+  activeFetch = request;
+  try {
+    return await request;
+  } finally {
+    if (activeFetch === request) activeFetch = null;
+  }
 }
 
 /**
