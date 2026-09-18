@@ -380,10 +380,12 @@ export interface GuildCalendarPageProps {
   userId?: string;
   /** Disabled members are view-only: they cannot respond to training attendance. */
   isDisabled?: boolean;
+  /** When false (tab hidden), realtime + fetches pause; cache still renders. */
+  active?: boolean;
 }
 
-export function GuildCalendarPage({ isManagement, userId = '', isDisabled = false }: GuildCalendarPageProps) {
-  const { events, loading, createEvent, updateEvent, updateEventDate, deleteEvent } = useGuildEvents();
+export function GuildCalendarPage({ isManagement, userId = '', isDisabled = false, active = true }: GuildCalendarPageProps) {
+  const { events, loading, createEvent, updateEvent, updateEventDate, deleteEvent } = useGuildEvents(active);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [modalOpen, setModalOpen]       = useState(false);
   const [editingEvent, setEditingEvent] = useState<GuildEvent | null>(null);

@@ -17,11 +17,14 @@ import { KpiStatsPage } from './components/kpi/KpiStatsPage';
 import { AnnouncementsPage } from './components/announcements/AnnouncementsPage';
 import { MemberOfTheWeekBanner } from './components/motw/MemberOfTheWeekBanner';
 import { Badge } from './components/ui/Badge';
+import { preloadKpiBoard } from './hooks/useKpiBoard';
+import { preloadLeagueBoard } from './hooks/useLeagueBoard';
+import { preloadKpiProfile } from './hooks/useKpiProfile';
 import { preloadProfiles } from './hooks/useAllProfiles';
 import { preloadAttendance } from './hooks/useAttendance';
 import { preloadAttendanceLog } from './hooks/useAttendanceResponseLog';
 import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
-import { useGuildEvents } from './hooks/useGuildEvents';
+import { preloadGuildEvents, useGuildEvents } from './hooks/useGuildEvents';
 import { useTrainingNotification } from './hooks/useTrainingNotification';
 import { FloatingNotification } from './components/ui/FloatingNotification';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
@@ -97,14 +100,17 @@ function AppContent() {
     return fresh.length > 0 ? fresh : lastPartiesRef.current;
   }, [warSetup.data]);
 
-  // Warm only the data needed for the first screen. The other tabs already
-  // fetch on mount; loading them all here creates a burst of duplicate work
-  // for every authenticated session and can race with the tab-level hooks.
+  // Preload all data into cache as soon as the user is authenticated
+  // so every tab opens instantly with zero loading spinners.
   useEffect(() => {
     if (auth.user?.id) {
       preloadProfiles().catch(() => {});
       preloadAttendance().catch(() => {});
       preloadWarSetup().catch(() => {});
+      preloadGuildEvents().catch(() => {});
+      preloadKpiBoard().catch(() => {});
+      preloadLeagueBoard().catch(() => {});
+      preloadKpiProfile(auth.user.id).catch(() => {});
     }
   }, [auth.user?.id]);
 
@@ -249,12 +255,15 @@ function AppContent() {
           {tab === 'response-log' && auth.profile.is_management && (
             <ResponseLogPage />
           )}
-          {/* League board stays mounted to preserve state across tab switches */}
+          {/* League board stays mounted to preserve state across tab switches.
+              Realtime + fetches pause while hidden (active=false) so background
+              tabs don't burn Disk IO budget; cache still renders on return. */}
           <div className={tab === 'league' ? '' : 'hidden'}>
             <LeagueBoardPage
               userId={auth.profile.id}
               isManagement={auth.profile.is_management}
               parties={partySummaries}
+              active={tab === 'league'}
               onUpdatePartyIcon={async (partyId, icon) => {
                 await warSetup.updatePartyIcon(partyId, icon);
               }}
@@ -266,6 +275,7 @@ function AppContent() {
               isManagement={auth.profile.is_management}
               userId={auth.profile.id}
               isDisabled={auth.profile.is_disabled === true}
+              active={tab === 'calendar'}
             />
           </div>
           {tab === 'kpi' && (

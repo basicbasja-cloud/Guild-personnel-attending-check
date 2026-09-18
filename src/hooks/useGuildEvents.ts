@@ -79,7 +79,7 @@ export interface UseGuildEventsReturn {
   deleteEvent: (id: string) => Promise<void>;
 }
 
-export function useGuildEvents(): UseGuildEventsReturn {
+export function useGuildEvents(active = true): UseGuildEventsReturn {
   const [events, setEvents] = useState<GuildEvent[]>(() => {
     // RAM first, then localStorage
     const hot = memCache ?? readCache();
@@ -101,19 +101,23 @@ export function useGuildEvents(): UseGuildEventsReturn {
     }
   }, []);
 
-  // Initial load — skip if fresh cache
+  // Initial load — skip if fresh cache. When inactive (tab hidden), serve
+  // cache only and skip both the fetch and the realtime subscription so
+  // hidden tabs don't burn Disk IO budget.
   useEffect(() => {
     const hot = memCache;
     if (hot && Date.now() - hot.at < CACHE_TTL_MS) {
       setEvents(hot.events);
       return;
     }
+    if (!active) return;
     fetchAll();
-  }, [fetchAll]);
+  }, [fetchAll, active]);
 
   // Realtime subscription — use unique channel name per hook instance
   const channelNameRef = useRef(`guild_events_rt_${Math.random().toString(36).slice(2, 10)}`);
   useEffect(() => {
+    if (!active) return;
     const chName = channelNameRef.current;
     const channel = supabase
       .channel(chName)
@@ -123,7 +127,7 @@ export function useGuildEvents(): UseGuildEventsReturn {
     return () => {
       channel.unsubscribe().finally(() => supabase.removeChannel(channel));
     };
-  }, [fetchAll]);
+  }, [fetchAll, active]);
 
   const createEvent = useCallback(async (payload: Omit<GuildEvent, 'id' | 'created_at' | 'updated_at'>) => {
     const tempId = `tmp_${Date.now()}`;

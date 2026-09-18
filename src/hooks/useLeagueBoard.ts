@@ -144,7 +144,7 @@ export type UseLeagueBoardReturn = LeagueBoardState & LeagueBoardActions;
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
-export function useLeagueBoard(): UseLeagueBoardReturn {
+export function useLeagueBoard(active = true): UseLeagueBoardReturn {
   const [state, setState] = useState<LeagueBoardState>(() => {
     // Seed from in-memory or localStorage cache for instant render
     const meta = metaMemCache ?? (() => { const l = readMetaLocal(); if (l) metaMemCache = l; return l; })();
@@ -246,18 +246,22 @@ export function useLeagueBoard(): UseLeagueBoardReturn {
     }
   }, []);
 
-  // Initial load
+  // Initial load — skipped while the tab is hidden so background tabs
+  // don't burn Disk IO budget. Cache still renders instantly on open.
   useEffect(() => {
+    if (!active) return;
     loadData();
-  }, [loadData, reloadCounter.current]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadData, active, reloadCounter.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reload plan data when active plan changes
   useEffect(() => {
+    if (!active) return;
     if (state.activePlanId) loadPlanData(state.activePlanId);
-  }, [state.activePlanId, loadPlanData]);
+  }, [state.activePlanId, loadPlanData, active]);
 
   // Realtime subscriptions for the active plan
   useEffect(() => {
+    if (!active) return;
     if (!state.activePlanId) return;
     const planId = state.activePlanId;
 
@@ -278,7 +282,7 @@ export function useLeagueBoard(): UseLeagueBoardReturn {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [state.activePlanId, loadPlanData]);
+  }, [state.activePlanId, loadPlanData, active]);
 
   // ── Actions ──────────────────────────────────────────────────────────
 

@@ -117,7 +117,14 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
       setWeekAttendances(rows);
       return rows;
     } catch (err) {
-      setError((err as { message?: string }).message ?? 'Failed to fetch attendance');
+      // Fail-fast timeout (see withDbTiming): keep showing cached rows instead
+      // of a spinner pileup. Only surface an error when we have nothing cached.
+      setWeekAttendances((prev) => {
+        if (prev.length === 0) {
+          setError((err as { message?: string }).message ?? 'Failed to fetch attendance');
+        }
+        return prev;
+      });
       return [];
     }
   }, [weekStartStr]);

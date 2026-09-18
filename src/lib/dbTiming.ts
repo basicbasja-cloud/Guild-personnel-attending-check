@@ -33,11 +33,19 @@ function recordTiming(entry: DbTimingEntry) {
 export async function withDbTiming<T>(
   method: DbMethod,
   label: string,
-  run: () => PromiseLike<T>
+  run: () => PromiseLike<T>,
+  timeoutMs = 15000
 ): Promise<T> {
   const start = performance.now();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Request timed out after ${timeoutMs}ms (${label}). Showing cached data.`));
+    }, timeoutMs);
+  });
   try {
-    const result = await run();
+    const result = await Promise.race([run(), timeoutPromise]);
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
     recordTiming({
       at: new Date().toISOString(),
       method,
@@ -47,6 +55,7 @@ export async function withDbTiming<T>(
     });
     return result;
   } catch (error) {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
     recordTiming({
       at: new Date().toISOString(),
       method,

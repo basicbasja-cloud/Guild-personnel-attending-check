@@ -59,6 +59,10 @@ export function useKpiBulkImport(): UseKpiBulkImportResult {
         errors: [],
       };
 
+      // Collect valid rows first so the whole batch goes in ONE RPC instead of
+      // one round-trip per row (60 rows = 60 RPCs + 60 score recomputes before).
+      const validEntries: { user_id: string; row: ParsedKpiRow }[] = [];
+
       for (const row of rows) {
         // Skip rows with validation errors
         if (row.errors.length > 0) {
@@ -87,30 +91,70 @@ export function useKpiBulkImport(): UseKpiBulkImportResult {
           continue;
         }
 
-        // Upsert the entry
-        const { error: rpcErr } = await supabase.rpc('upsert_kpi_weekly_entry', {
-          target_user_id:           userId,
-          target_week_start:        weekStart,
-          target_role_tag:          row.roleTag,
-          damage_dealt_value:       row.damage_dealt,
-          siege_damage_value:       row.siege_damage,
-          damage_taken_value:       row.damage_taken,
-          kills_value:              row.kills,
-          deaths_value:             row.deaths,
-          assists_value:            row.assists,
-          healing_done_value:       row.healing_done,
-          ally_revives_value:       row.ally_revives,
-          resources_gathered_value: row.resources_gathered,
+        validEntries.push({ user_id: userId, row });
+      }
+
+      if (validEntries.length > 0) {
+        // Single bulk RPC: one round-trip, one transaction, one score pass.
+        // Falls back to per-row upserts only if the bulk function is missing
+        // (e.g. migration not applied yet) so imports never hard-fail.
+        const payload = validEntries.map(({ user_id, row }) => ({
+          user_id,
+          week_start: weekStart,
+          role_tag: row.roleTag,
+          damage_dealt: row.damage_dealt,
+          siege_damage: row.siege_damage,
+          damage_taken: row.damage_taken,
+          kills: row.kills,
+          deaths: row.deaths,
+          assists: row.assists,
+          healing_done: row.healing_done,
+          ally_revives: row.ally_revives,
+          resources_gathered: row.resources_gathered,
+        }));
+
+        const { error: bulkErr } = await supabase.rpc('bulk_upsert_kpi_weekly_entries', {
+          entries: payload,
         });
 
-        if (rpcErr) {
-          result.errors.push({
-            row: row.rowNumber,
-            characterName: row.characterName,
-            message: rpcErr.message,
-          });
+        if (bulkErr && bulkErr.message.includes('bulk_upsert_kpi_weekly_entries')) {
+          // Bulk RPC missing — legacy per-row path (slower, same result).
+          for (const { user_id, row } of validEntries) {
+            const { error: rpcErr } = await supabase.rpc('upsert_kpi_weekly_entry', {
+              target_user_id:           user_id,
+              target_week_start:        weekStart,
+              target_role_tag:          row.roleTag,
+              damage_dealt_value:       row.damage_dealt,
+              siege_damage_value:       row.siege_damage,
+              damage_taken_value:       row.damage_taken,
+              kills_value:              row.kills,
+              deaths_value:             row.deaths,
+              assists_value:            row.assists,
+              healing_done_value:       row.healing_done,
+              ally_revives_value:       row.ally_revives,
+              resources_gathered_value: row.resources_gathered,
+            });
+
+            if (rpcErr) {
+              result.errors.push({
+                row: row.rowNumber,
+                characterName: row.characterName,
+                message: rpcErr.message,
+              });
+            } else {
+              result.success++;
+            }
+          }
+        } else if (bulkErr) {
+          for (const { row } of validEntries) {
+            result.errors.push({
+              row: row.rowNumber,
+              characterName: row.characterName,
+              message: bulkErr.message,
+            });
+          }
         } else {
-          result.success++;
+          result.success += validEntries.length;
         }
       }
 

@@ -236,10 +236,12 @@ interface LeagueBoardPageProps {
   isManagement: boolean;
   parties: PartySummaryWithMembers[];
   onUpdatePartyIcon: (partyId: string, icon: PartyIcon | null) => Promise<void>;
+  /** When false (tab hidden), realtime + fetches pause; cache still renders. */
+  active?: boolean;
 }
 
-export function LeagueBoardPage({ userId: _userId, isManagement, parties, onUpdatePartyIcon }: LeagueBoardPageProps) {
-  const board = useLeagueBoard();
+export function LeagueBoardPage({ userId: _userId, isManagement, parties, onUpdatePartyIcon, active = true }: LeagueBoardPageProps) {
+  const board = useLeagueBoard(active);
 
   // UI state
   const [popoverPartyId, setPopoverPartyId]       = useState<string | null>(null);

@@ -268,7 +268,12 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
       const result = await loadSetupDataShared(weekStartStr, setupType, eventId);
       setData(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      // Fail-fast timeout: keep cached board instead of blanking it. Only
+      // surface an error when there is nothing cached to show.
+      setData((prev) => {
+        if (!prev) setError(e instanceof Error ? e.message : 'Unknown error');
+        return prev;
+      });
     }
   }, [weekStartStr, setupType, eventId]);
 
@@ -284,7 +289,16 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
     }
     loadSetupDataShared(weekStartStr, setupType, eventId)
       .then((result) => { if (!cancelled) { setData(result); setLoading(false); } })
-      .catch((e) => { if (!cancelled) { setError(e instanceof Error ? e.message : 'Unknown error'); setLoading(false); } });
+      .catch((e) => {
+        if (!cancelled) {
+          // Keep stale cache visible on timeout; error only when empty.
+          setData((prev) => {
+            if (!prev) setError(e instanceof Error ? e.message : 'Unknown error');
+            return prev;
+          });
+          setLoading(false);
+        }
+      });
     return () => { cancelled = true; };
   }, [weekStartStr, setupType, eventId]);
 
