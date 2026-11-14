@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { formatISO } from 'date-fns';
 import { getUpcomingSaturday, isDoubleWarWeek } from '../../lib/week';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
@@ -6,7 +6,6 @@ import { KpiAwardsBoard } from './KpiAwardsBoard';
 import { KpiPersonalCard } from './KpiPersonalCard';
 import { KpiEntryModal } from './KpiEntryModal';
 import { invalidateKpiProfileCache } from '../../hooks/useKpiProfile';
-import { downloadKpiTemplate, parseKpiExcel } from '../../lib/kpiExcel';
 import type { ParsedKpiRow } from '../../lib/kpiExcel';
 import { useKpiBulkImport } from '../../hooks/useKpiBulkImport';
 import { SnakeGame } from './SnakeGame';
@@ -26,6 +25,8 @@ interface KpiStatsPageProps {
   /** Disabled members are view-only: no stat entry, no mini games. */
   isDisabled?:    boolean;
 }
+
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
 function defaultWeek(): string {
   return formatISO(getUpcomingSaturday(new Date()), { representation: 'date' });
@@ -53,6 +54,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisab
   const [importOpen, setImportOpen]   = useState(false);
   const [parsedRows, setParsedRows]   = useState<ParsedKpiRow[] | null>(null);
   const [importFileName, setImportFileName] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { importing, results, bulkImport, reset: resetImport } = useKpiBulkImport();
   const [miniGamesOpen, setMiniGamesOpen] = useState(false);
@@ -72,6 +74,17 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisab
   };
 
   const { profiles } = useAllProfiles();
+
+  // Excel tooling is loaded on demand so SheetJS stays out of the initial bundle.
+  const handleDownloadTemplate = useCallback(async () => {
+    try {
+      const { downloadKpiTemplate } = await import('../../lib/kpiExcel');
+      downloadKpiTemplate(profiles);
+      setImportError(null);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Failed to build the template.');
+    }
+  }, [profiles]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -138,7 +151,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisab
           {isSuperManager && (
             <>
               <button
-                onClick={() => downloadKpiTemplate(profiles)}
+                onClick={() => void handleDownloadTemplate()}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
               >
                 📥 Template
@@ -272,7 +285,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisab
                 >
                   <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 overflow-hidden shrink-0">
                     {p.avatar_url ? (
-                      <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                      <img loading="lazy" decoding="async" src={p.avatar_url} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <span className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
                         {(p.character_name || p.username).charAt(0).toUpperCase()}
@@ -320,10 +333,24 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisab
           const file = e.target.files?.[0];
           if (!file) return;
           setImportFileName(file.name);
-          const rows = await parseKpiExcel(file);
-          setParsedRows(rows);
-          // Reset the input so the same file can be re-selected
-          if (fileInputRef.current) fileInputRef.current.value = '';
+          setImportError(null);
+          if (file.size > MAX_IMPORT_BYTES) {
+            setParsedRows(null);
+            setImportError('File is too large (max 5 MB).');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+          }
+          try {
+            const { parseKpiExcel } = await import('../../lib/kpiExcel');
+            const rows = await parseKpiExcel(file);
+            setParsedRows(rows);
+          } catch (err) {
+            setParsedRows(null);
+            setImportError(err instanceof Error ? err.message : 'Failed to read the Excel file.');
+          } finally {
+            // Reset the input so the same file can be re-selected
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }
         }}
       />
 
@@ -341,9 +368,10 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisab
                     ? `File: ${importFileName} · ${parsedRows ? parsedRows.length : 0} rows found`
                     : 'Select an Excel file to import'}
                 </p>
+                {importError && <p className="text-rose-400 text-xs mt-1">{importError}</p>}
               </div>
               <button
-                onClick={() => { setImportOpen(false); setParsedRows(null); resetImport(); }}
+                onClick={() => { setImportOpen(false); setParsedRows(null); setImportError(null); resetImport(); }}
                 className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 transition-colors"
               >✕</button>
             </div>
@@ -366,7 +394,7 @@ export function KpiStatsPage({ currentUserId, isSuperManager, isManager, isDisab
                       Choose File
                     </button>
                     <button
-                      onClick={() => downloadKpiTemplate(profiles)}
+                      onClick={() => void handleDownloadTemplate()}
                       className="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors"
                     >
                       📥 Download Template

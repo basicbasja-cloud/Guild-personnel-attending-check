@@ -41,11 +41,12 @@ async function fetchAndCache(): Promise<Profile[]> {
   if (activeFetch) return activeFetch;
 
   const request = (async () => {
-    let result = await withDbTiming('GET', 'profiles.all', () =>
+    let result = await withDbTiming('GET', 'profiles.all', (signal) =>
       supabase
         .from('profiles')
         .select(PROFILE_SELECT_COLUMNS)
         .order('username')
+        .abortSignal(signal)
     );
 
     // Graceful fallback: if the is_disabled column doesn't exist yet (patch not
@@ -54,11 +55,12 @@ async function fetchAndCache(): Promise<Profile[]> {
     const errMsg = (result.error as { message?: string } | null)?.message ?? '';
     if (result.error && errMsg.includes('is_disabled')) {
       console.warn('[useAllProfiles] is_disabled column missing — run supabase/patch_member_disabled.sql. Falling back to legacy select.');
-      result = (await withDbTiming('GET', 'profiles.all.legacy', () =>
+      result = (await withDbTiming('GET', 'profiles.all.legacy', (signal) =>
         supabase
           .from('profiles')
           .select(PROFILE_SELECT_COLUMNS_LEGACY)
           .order('username')
+          .abortSignal(signal)
       )) as typeof result;
     }
 

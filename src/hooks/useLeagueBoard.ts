@@ -84,6 +84,21 @@ export interface LeagueDrawing {
   created_at: string;
 }
 
+// ─── Drawing limits ──────────────────────────────────────────────────────────
+
+const MAX_DRAWING_POINTS = 500;
+const REALTIME_RELOAD_DEBOUNCE_MS = 300;
+
+/** Bound stored stroke size so long drawings cannot grow without limit. */
+function capDrawingPoints(points: { x: number; y: number }[]): { x: number; y: number }[] {
+  if (points.length <= MAX_DRAWING_POINTS) return points;
+  const step = Math.ceil(points.length / MAX_DRAWING_POINTS);
+  const capped = points.filter((_, index) => index % step === 0);
+  const last = points[points.length - 1];
+  if (capped[capped.length - 1] !== last) capped.push(last);
+  return capped;
+}
+
 // ─── Hook state ──────────────────────────────────────────────────────────────
 
 /** Minimal party info fetched from war_parties for plans that reference older weeks */
@@ -238,7 +253,7 @@ export function useLeagueBoard(active = true): UseLeagueBoardReturn {
         arrows: (arrowRes.data ?? []) as LeagueArrow[],
         drawings: (drawRes.data ?? []).map((d) => ({
           ...d,
-          points: (d.points ?? []) as { x: number; y: number }[],
+          points: capDrawingPoints((d.points ?? []) as { x: number; y: number }[]),
         })) as LeagueDrawing[],
       }));
     } catch (err) {
@@ -265,23 +280,36 @@ export function useLeagueBoard(active = true): UseLeagueBoardReturn {
     if (!state.activePlanId) return;
     const planId = state.activePlanId;
 
+    // Coalesce bursts (e.g. a party swap or a few strokes) into one reload.
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        void loadPlanData(planId);
+      }, REALTIME_RELOAD_DEBOUNCE_MS);
+    };
+
     const channel = supabase
       .channel(`league_plan_${planId}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'league_zone_assignments',
         filter: `plan_id=eq.${planId}`,
-      }, () => { loadPlanData(planId); })
+      }, scheduleReload)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'league_arrows',
         filter: `plan_id=eq.${planId}`,
-      }, () => { loadPlanData(planId); })
+      }, scheduleReload)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'league_drawings',
         filter: `plan_id=eq.${planId}`,
-      }, () => { loadPlanData(planId); })
+      }, scheduleReload)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      supabase.removeChannel(channel);
+    };
   }, [state.activePlanId, loadPlanData, active]);
 
   // ── Actions ──────────────────────────────────────────────────────────
@@ -462,16 +490,17 @@ export function useLeagueBoard(active = true): UseLeagueBoardReturn {
     phase: 1 | 2 | 3,
     points: { x: number; y: number }[]
   ) => {
+    const cappedPoints = capDrawingPoints(points);
     const tempId = `tmp_${Date.now()}`;
     const optimistic: LeagueDrawing = {
-      id: tempId, plan_id: planId, phase, points,
+      id: tempId, plan_id: planId, phase, points: cappedPoints,
       created_at: new Date().toISOString(),
     };
     setState((s) => ({ ...s, drawings: [...s.drawings, optimistic] }));
 
     const { data, error } = await supabase
       .from('league_drawings')
-      .insert({ plan_id: planId, phase, points })
+      .insert({ plan_id: planId, phase, points: cappedPoints })
       .select().single();
 
     if (error) {

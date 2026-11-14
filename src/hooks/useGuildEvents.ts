@@ -37,7 +37,8 @@ async function fetchEvents(): Promise<GuildEvent[]> {
     const { data, error } = await supabase
       .from('guild_events')
       .select('*')
-      .order('event_date', { ascending: true, nullsFirst: false });
+      .order('event_date', { ascending: true, nullsFirst: false })
+      .limit(500);
     if (error) throw error;
     const events = (data ?? []) as GuildEvent[];
     writeCache(events);

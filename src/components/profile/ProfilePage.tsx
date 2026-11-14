@@ -145,7 +145,7 @@ export function ProfilePage({ userId, currentUserId, isManagement, readOnly = fa
         {/* Header */}
         <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 px-5 pt-5 pb-4 rounded-t-2xl flex items-center gap-4">
           {profile?.avatar_url ? (
-            <img src={profile.avatar_url} alt="avatar" className="w-14 h-14 rounded-full border-2 border-slate-600 shrink-0" />
+            <img loading="lazy" decoding="async" src={profile.avatar_url} alt="avatar" className="w-14 h-14 rounded-full border-2 border-slate-600 shrink-0" />
           ) : (
             <div className="w-14 h-14 rounded-full bg-slate-700 flex items-center justify-center text-2xl shrink-0">👤</div>
           )}

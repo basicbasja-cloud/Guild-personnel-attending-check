@@ -60,12 +60,13 @@ async function fetchEventRows(eventId: string): Promise<TrainingAttendance[]> {
     const { data: baseData, error: baseErr } = await withDbTiming(
       'GET',
       `training_attendance.rows event=${eventId}`,
-      () =>
+      (signal) =>
         supabase
           .from('training_attendance')
           .select('id,event_id,user_id,status,created_at,updated_at,set_by')
           .eq('event_id', eventId)
           .order('created_at', { ascending: true })
+          .abortSignal(signal)
     );
 
     if (baseErr) throw baseErr;
@@ -79,11 +80,12 @@ async function fetchEventRows(eventId: string): Promise<TrainingAttendance[]> {
       const { data: profilesData, error: profilesErr } = await withDbTiming(
         'GET',
         `profiles.byIds count=${allProfileIds.length}`,
-        () =>
+        (signal) =>
           supabase
             .from('profiles')
             .select('id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at')
             .in('id', allProfileIds)
+            .abortSignal(signal)
       );
       if (!profilesErr) {
         profileById = new Map(
@@ -107,7 +109,8 @@ async function fetchEventRows(eventId: string): Promise<TrainingAttendance[]> {
   })();
 
   activeFetches.set(eventId, promise);
-  promise.finally(() => activeFetches.delete(eventId));
+  const cleanup = () => activeFetches.delete(eventId);
+  promise.then(cleanup, cleanup);
   return promise;
 }
 

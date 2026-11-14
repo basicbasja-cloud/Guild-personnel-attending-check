@@ -173,7 +173,7 @@ export function Header({ profile, onSignOut, onLogoColorChange, onProfileClick }
             title={onProfileClick ? 'My Profile' : undefined}
           >
             {profile.avatar_url ? (
-              <img
+              <img loading="lazy" decoding="async"
                 src={profile.avatar_url}
                 alt={profile.username}
                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-indigo-500"

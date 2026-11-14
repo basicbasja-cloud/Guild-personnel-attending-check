@@ -251,6 +251,16 @@ create policy "war_parties_insert_mgmt"
     exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
   );
 
+drop policy if exists "war_parties_update_mgmt" on public.war_parties;
+create policy "war_parties_update_mgmt"
+  on public.war_parties for update
+  using (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  )
+  with check (
+    exists (select 1 from public.profiles where id = (select auth.uid()) and is_management = true)
+  );
+
 drop policy if exists "war_parties_delete_mgmt" on public.war_parties;
 create policy "war_parties_delete_mgmt"
   on public.war_parties for delete

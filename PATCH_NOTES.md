@@ -1,3 +1,26 @@
+# Patch Notes - November 14, 2026
+
+## For Guild Members & Officers
+
+- **Much faster first load** - the app no longer prefetches every feature at login. Initial JavaScript dropped from about 1.24 MB to about 468 kB total, and KPI/Excel tools only load when opened.
+- **War Setup "Available" list fixed** - a stale cache could hide every unassigned player even though the parties were fine. The cache is now versioned and rebuilt with member profiles.
+- **Response Times has a period selector** - choose the last 4, 8, 12, 26, or 52 weeks. The page no longer downloads the entire attendance history on every login.
+- **Party icons save correctly** - the management-only UPDATE policy is applied and verified live. `supabase/patch_war_parties_update.sql` remains available for other environments.
+- **Stability** - transient timeouts now retry once and show a clear error with Retry instead of silently caching an empty board. Old weekly caches are pruned automatically.
+
+## For Technical People
+
+- `useAttendance` cache format bumped to `v2`; legacy/partial entries are dropped on read. `main.tsx` now shares one joined fetch with the hook.
+- `withDbTiming` aborts timed-out reads; war-setup reads retry once with a 25 s timeout.
+- Response log query is windowed (4-week default), capped at 1,000 rows with a truncation warning, and loaded on demand.
+- Heavy tabs are `React.lazy`; `xlsx` and `warExport` are dynamic imports (separate chunks).
+- League realtime reloads are debounced (300 ms); freehand strokes are capped at 500 points.
+- PNG export uses a 16 M-pixel budget and `toBlob` + object URLs.
+- Local weekly caches older than 8 weeks are evicted on startup.
+- SQL: `supabase/patch_war_parties_update.sql` adds `war_parties_update_mgmt` (applied and verified live).
+
+---
+
 # Patch Notes — September 2, 2026
 
 ---

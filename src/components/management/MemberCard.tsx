@@ -49,7 +49,7 @@ export function MemberCard({ id, profile, origin, compact = false, isMaybe = fal
           ${isMaybe ? 'border-dashed border-amber-400/80' : 'border-slate-600 hover:border-indigo-500'}`}
       >
         {profile.avatar_url ? (
-          <img src={profile.avatar_url} alt={profile.username} className="w-6 h-6 rounded-full shrink-0" />
+          <img loading="lazy" decoding="async" src={profile.avatar_url} alt={profile.username} className="w-6 h-6 rounded-full shrink-0" />
         ) : (
           <div className="w-6 h-6 rounded-full bg-indigo-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
             {profile.username.charAt(0).toUpperCase()}
@@ -110,7 +110,7 @@ export function MemberCard({ id, profile, origin, compact = false, isMaybe = fal
         ${isMaybe ? 'border-dashed border-amber-400/80' : 'border-slate-600 hover:border-indigo-500'}`}
     >
       {profile.avatar_url ? (
-        <img src={profile.avatar_url} alt={profile.username} className="w-9 h-9 rounded-full shrink-0" />
+        <img loading="lazy" decoding="async" src={profile.avatar_url} alt={profile.username} className="w-9 h-9 rounded-full shrink-0" />
       ) : (
         <div className="w-9 h-9 rounded-full bg-indigo-700 flex items-center justify-center text-white text-sm shrink-0 font-bold">
           {profile.username.charAt(0).toUpperCase()}

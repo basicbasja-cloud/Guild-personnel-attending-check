@@ -9,6 +9,38 @@
  * 3. Embed in SVG foreignObject — browser renders natively, supports oklch
  * 4. Load SVG as Image, draw to Canvas, export as PNG
  */
+// ~64 MiB RGBA budget for the export canvas; larger boards are downscaled.
+const MAX_EXPORT_PIXELS = 16_000_000;
+const MIN_EXPORT_SCALE = 0.5;
+const MAX_EXPORT_SCALE = 2;
+
+function exportScaleFor(width: number, height: number): number {
+  const budgetScale = Math.sqrt(MAX_EXPORT_PIXELS / Math.max(1, width * height));
+  return Math.max(MIN_EXPORT_SCALE, Math.min(MAX_EXPORT_SCALE, budgetScale));
+}
+
+function downloadCanvasPng(canvas: HTMLCanvasElement, filename: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('PNG encoding failed'));
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement('a');
+        link.download = `${filename}.png`;
+        link.href = url;
+        link.click();
+        resolve();
+      } finally {
+        // The download has been handed to the browser by the time click() returns.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    }, 'image/png');
+  });
+}
+
 export async function exportElementAsPng(element: HTMLElement, filename: string): Promise<void> {
   // ── 1. Deep clone and inline computed styles ────────────────────────
   function inlineComputedStyles(root: HTMLElement): HTMLElement {
@@ -92,18 +124,27 @@ export async function exportElementAsPng(element: HTMLElement, filename: string)
     const dataUrl = `data:image/svg+xml;base64,${base64}`;
 
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = w * 2;
-      canvas.height = h * 2;
-      const ctx = canvas.getContext('2d')!;
-      ctx.scale(2, 2);
-      ctx.drawImage(img, 0, 0);
+      void (async () => {
+        try {
+          const scale = exportScaleFor(w, h);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(w * scale));
+          canvas.height = Math.max(1, Math.round(h * scale));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas is not supported');
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.setTransform(scale, 0, 0, scale, 0, 0);
+          ctx.drawImage(img, 0, 0);
 
-      const link = document.createElement('a');
-      link.download = `${filename}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-      resolve();
+          await downloadCanvasPng(canvas, filename);
+          canvas.width = 0;
+          canvas.height = 0;
+          resolve();
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error('Export failed'));
+        }
+      })();
     };
     img.onerror = () => {
       fallbackExport(element, filename, resolve, reject);
@@ -117,12 +158,12 @@ async function fallbackExport(
   resolve: () => void, reject: (e: Error) => void,
 ): Promise<void> {
   try {
-    // Try dynamic import of a smaller canvas-based approach
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
     const rect = element.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
+    const scale = exportScaleFor(rect.width, rect.height);
+    canvas.width = Math.max(1, Math.round(rect.width * scale));
+    canvas.height = Math.max(1, Math.round(rect.height * scale));
 
     // Draw a simple placeholder so users at least get something
     ctx.fillStyle = '#0f172a';
@@ -135,10 +176,9 @@ async function fallbackExport(
     ctx.fillStyle = '#94a3b8';
     ctx.fillText('(Export failed — please try again or use CSV)', canvas.width / 2, canvas.height / 2 + 16);
 
-    const link = document.createElement('a');
-    link.download = `${filename}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    await downloadCanvasPng(canvas, filename);
+    canvas.width = 0;
+    canvas.height = 0;
     resolve();
   } catch {
     reject(new Error('Export failed'));

@@ -45,7 +45,7 @@ export function MemberOfTheWeekBanner({ isManagement }: MemberOfTheWeekBannerPro
 
         <div className="flex items-center gap-2.5">
           {profile.avatar_url ? (
-            <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full ring-2 ring-amber-400/60" />
+            <img loading="lazy" decoding="async" src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full ring-2 ring-amber-400/60" />
           ) : (
             <div className="w-8 h-8 rounded-full bg-amber-700 flex items-center justify-center text-white text-sm font-bold ring-2 ring-amber-400/60">
               {profile.username.charAt(0).toUpperCase()}

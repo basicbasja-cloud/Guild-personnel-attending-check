@@ -14,7 +14,8 @@ declare global {
   }
 }
 
-const SHOULD_LOG_TIMING = import.meta.env.VITE_ENABLE_DB_TIMING !== 'false';
+const SHOULD_LOG_TIMING =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_DB_TIMING === 'true';
 
 function recordTiming(entry: DbTimingEntry) {
   if (!SHOULD_LOG_TIMING || typeof window === 'undefined') return;
@@ -33,19 +34,25 @@ function recordTiming(entry: DbTimingEntry) {
 export async function withDbTiming<T>(
   method: DbMethod,
   label: string,
-  run: () => PromiseLike<T>,
+  run: (signal: AbortSignal) => PromiseLike<T>,
   timeoutMs = 15000
 ): Promise<T> {
   const start = performance.now();
+  const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(new Error(`Request timed out after ${timeoutMs}ms (${label}). Showing cached data.`));
+      timedOut = true;
+      // Abort the underlying request when the caller honors the signal.
+      controller.abort();
+      reject(new Error(`Request timed out after ${timeoutMs}ms (${label}).`));
     }, timeoutMs);
   });
+
   try {
-    const result = await Promise.race([run(), timeoutPromise]);
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    const result = await Promise.race([run(controller.signal), timeoutPromise]);
     recordTiming({
       at: new Date().toISOString(),
       method,
@@ -55,7 +62,6 @@ export async function withDbTiming<T>(
     });
     return result;
   } catch (error) {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
     recordTiming({
       at: new Date().toISOString(),
       method,
@@ -63,6 +69,11 @@ export async function withDbTiming<T>(
       durationMs: performance.now() - start,
       ok: false,
     });
+    if (timedOut) {
+      throw new Error(`Request timed out after ${timeoutMs}ms (${label}).`);
+    }
     throw error;
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }

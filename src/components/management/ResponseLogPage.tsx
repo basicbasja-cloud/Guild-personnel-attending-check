@@ -1,6 +1,11 @@
 import { Fragment, useMemo, useState } from 'react';
 import { addDays, format, formatISO, startOfDay } from 'date-fns';
-import { useAttendanceResponseLog, type AttendanceLogEntry } from '../../hooks/useAttendanceResponseLog';
+import {
+  useAttendanceResponseLog,
+  type AttendanceLogEntry,
+  RESPONSE_LOG_DEFAULT_WEEKS,
+  RESPONSE_LOG_MAX_ROWS,
+} from '../../hooks/useAttendanceResponseLog';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { getUpcomingSaturday, isDoubleWarWeek } from '../../lib/week';
 import { downloadCsv } from '../../lib/exportCsv';
@@ -65,7 +70,9 @@ const NON_SELECT = {
 };
 
 export function ResponseLogPage() {
-  const { entries, loading, error, refreshing, refresh } = useAttendanceResponseLog();
+  const [weeksBack, setWeeksBack] = useState(RESPONSE_LOG_DEFAULT_WEEKS);
+  const { entries, loading, error, refreshing, refresh, truncated } =
+    useAttendanceResponseLog(true, weeksBack);
   const { profiles } = useAllProfiles();
 
   const [search, setSearch] = useState('');
@@ -80,6 +87,17 @@ export function ResponseLogPage() {
   const entryByKey = useMemo(() => {
     const m = new Map<string, AttendanceLogEntry>();
     for (const e of entries) m.set(`${e.user_id}|${e.week_start}`, e);
+    return m;
+  }, [entries]);
+
+  // Group once instead of filtering the whole log for every player.
+  const entriesByUser = useMemo(() => {
+    const m = new Map<string, AttendanceLogEntry[]>();
+    for (const e of entries) {
+      const list = m.get(e.user_id);
+      if (list) list.push(e);
+      else m.set(e.user_id, [e]);
+    }
     return m;
   }, [entries]);
 
@@ -104,8 +122,8 @@ export function ResponseLogPage() {
       .map((profile) => ({
         profile,
         entry: entryByKey.get(`${profile.id}|${thisWeekStr}`) ?? null,
-        otherWeeks: entries
-          .filter((e) => e.user_id === profile.id && e.week_start !== thisWeekStr)
+        otherWeeks: (entriesByUser.get(profile.id) ?? [])
+          .filter((e) => e.week_start !== thisWeekStr)
           .sort((a, b) => b.week_start.localeCompare(a.week_start)),
       }))
       .filter((r) => {
@@ -133,7 +151,7 @@ export function ResponseLogPage() {
         if (b.entry) return 1;
         return a.profile.username.localeCompare(b.profile.username);
       });
-  }, [entries, entryByKey, profiles, search, statusFilter, thisWeekStr]);
+  }, [entriesByUser, entryByKey, profiles, search, statusFilter, thisWeekStr]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const toggle = (userId: string) => {
@@ -185,6 +203,7 @@ export function ResponseLogPage() {
               🕒 Response Times
               <span className="text-xs font-normal text-slate-400">
                 this week: <span className="text-white">{thisWeekLabel}</span>
+                <span className="ml-2 text-slate-500">· last {weeksBack} weeks</span>
                 {isThisWeekDouble && (
                   <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300" title="Double war week">
                     ⚔️ 2×
@@ -203,7 +222,7 @@ export function ResponseLogPage() {
               <button
                 onClick={handleExport}
                 className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
-                title="Export full history (all weeks) to CSV"
+                title="Export the selected period to CSV"
               >
                 ⬇ Export
               </button>
@@ -218,6 +237,18 @@ export function ResponseLogPage() {
               placeholder="Search player / character / class…"
               className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
+            <select
+              value={weeksBack}
+              onChange={(e) => setWeeksBack(Number(e.target.value))}
+              className="bg-slate-800 border border-slate-600 rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+              title="History window"
+            >
+              <option value={4}>Last 4 weeks</option>
+              <option value={8}>Last 8 weeks</option>
+              <option value={12}>Last 12 weeks</option>
+              <option value={26}>Last 26 weeks</option>
+              <option value={52}>Last 52 weeks</option>
+            </select>
             <div className="flex bg-slate-800 rounded-lg p-0.5 self-start overflow-x-auto scrollbar-hide">
               {STATUS_FILTERS.map((f) => (
                 <button
@@ -259,6 +290,12 @@ export function ResponseLogPage() {
         {error && (
           <div className="m-3 sm:m-4 bg-rose-900/40 border border-rose-700 rounded-lg p-3 text-rose-300 text-sm">
             {error}
+          </div>
+        )}
+
+        {truncated && !error && (
+          <div className="m-3 sm:m-4 bg-amber-900/30 border border-amber-700 rounded-lg p-3 text-amber-300 text-sm">
+            Showing the first {RESPONSE_LOG_MAX_ROWS} rows. Choose a shorter period to see complete history.
           </div>
         )}
 
@@ -309,6 +346,8 @@ export function ResponseLogPage() {
                               <img
                                 src={r.profile.avatar_url}
                                 alt={r.profile.username}
+                                loading="lazy"
+                                decoding="async"
                                 className="w-8 h-8 rounded-full shrink-0"
                               />
                             ) : (

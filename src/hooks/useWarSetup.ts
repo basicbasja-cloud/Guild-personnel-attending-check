@@ -11,6 +11,8 @@ export interface WarSetupData {
   setup: WarSetup;
   groups: GroupWithParties[];
   substitutes: WarPartyMember[];
+  /** True when the server is missing groups or party slots for this setup. */
+  incomplete?: boolean;
 }
 
 export interface GroupWithParties {
@@ -36,11 +38,27 @@ function cacheKey(weekStr: string, eventType: EventType, eventId?: string): stri
   return weekStr;
 }
 
+/**
+ * A cached board is usable when the setup and its groups loaded. Boards with
+ * groups but no party slots are the poisoned result of a previously failed
+ * war_parties request, so they must never be served from cache.
+ */
+function isCacheUsable(data: WarSetupData): boolean {
+  return Array.isArray(data.groups) &&
+    data.groups.length > 0 &&
+    data.groups.every((group) =>
+      Array.isArray(group.parties) && group.parties.length > 0
+    );
+}
+
 function readCache(weekStr: string, eventType: EventType = 'war', eventId?: string): { at: number; data: WarSetupData } | null {
   const key = cacheKey(weekStr, eventType, eventId);
   // Check RAM first
   const hot = hotCache.get(key);
-  if (hot) return hot;
+  if (hot) {
+    if (isCacheUsable(hot.data)) return hot;
+    hotCache.delete(key);
+  }
   // Fall back to localStorage
   try {
     const raw = localStorage.getItem(CACHE_PREFIX + key);
@@ -49,6 +67,10 @@ function readCache(weekStr: string, eventType: EventType = 'war', eventId?: stri
     // Guard against old cache format with missing/null arrays
     if (!parsed?.data || !Array.isArray(parsed.data.groups) || !Array.isArray(parsed.data.substitutes)) return null;
     const entry = parsed as { at: number; data: WarSetupData };
+    if (!isCacheUsable(entry.data)) {
+      localStorage.removeItem(CACHE_PREFIX + key);
+      return null;
+    }
     hotCache.set(key, entry); // promote to RAM
     return entry;
   } catch {
@@ -130,73 +152,150 @@ function placeUserInData(
 
 // ── Database loader ─────────────────────────────────────────────────────────
 
+const WAR_READ_TIMEOUT_MS = 25_000;
+const READ_RETRY_DELAY_MS = 500;
+
+/** Retry idempotent reads once so a transient network blip is not fatal. */
+async function withReadRetry<T>(run: () => Promise<T>, attempts = 2): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, READ_RETRY_DELAY_MS));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function loadSetupData(
   weekStartStr: string,
   eventType: EventType = 'war',
   eventId?: string
 ): Promise<WarSetupData | null> {
-  let query = supabase
-    .from('war_setups')
-    .select('*');
+  const { data: setupData } = await withReadRetry(async () => {
+    const result = await withDbTiming(
+      'GET',
+      eventType === 'training' ? `war_setups.byEvent event=${eventId}` : `war_setups.byWeek week=${weekStartStr}`,
+      (signal) => {
+        let query = supabase.from('war_setups').select('*');
+        if (eventType === 'training' && eventId) {
+          query = query.eq('event_id', eventId).eq('type', 'training');
+        } else {
+          query = query.eq('week_start', weekStartStr).eq('type', 'war');
+        }
+        return query.abortSignal(signal).maybeSingle();
+      },
+      WAR_READ_TIMEOUT_MS
+    );
+    if (result.error) throw new Error(`Failed to load war setup: ${result.error.message}`);
+    return result;
+  });
 
-  if (eventType === 'training' && eventId) {
-    query = query.eq('event_id', eventId).eq('type', 'training');
-  } else {
-    query = query.eq('week_start', weekStartStr).eq('type', 'war');
-  }
-
-  const { data: setupData, error: setupErr } = await withDbTiming(
-    'GET',
-    eventType === 'training' ? `war_setups.byEvent event=${eventId}` : `war_setups.byWeek week=${weekStartStr}`,
-    () => query.maybeSingle()
-  );
-
-  if (setupErr || !setupData) return null;
+  if (!setupData) return null;
   const setup = setupData as WarSetup;
 
   // Fetch war_groups and war_party_members in parallel — both only need
   // setup.id which is now available. war_parties must wait for group IDs,
   // so it runs in a third round-trip after war_groups resolves.
   const [groupsResult, membersResult] = await Promise.all([
-    withDbTiming(
-      'GET',
-      `war_groups.bySetup setup=${setup.id}`,
-      () =>
-        supabase
-          .from('war_groups')
-          .select('*')
-          .eq('war_setup_id', setup.id)
-          .order('group_number')
-    ),
-    withDbTiming(
-      'GET',
-      `war_party_members.bySetup setup=${setup.id}`,
-      () =>
-        supabase
-          .from('war_party_members')
-          .select('*, profile:profiles(*)')
-          .eq('war_setup_id', setup.id)
-          .order('position')
-    ),
+    withReadRetry(async () => {
+      const result = await withDbTiming(
+        'GET',
+        `war_groups.bySetup setup=${setup.id}`,
+        (signal) =>
+          supabase
+            .from('war_groups')
+            .select('*')
+            .eq('war_setup_id', setup.id)
+            .order('group_number')
+            .abortSignal(signal),
+        WAR_READ_TIMEOUT_MS
+      );
+      if (result.error) throw new Error(`Failed to load war groups: ${result.error.message}`);
+      return result;
+    }),
+    withReadRetry(async () => {
+      const result = await withDbTiming(
+        'GET',
+        `war_party_members.bySetup setup=${setup.id}`,
+        (signal) =>
+          supabase
+            .from('war_party_members')
+            .select('*, profile:profiles(*)')
+            .eq('war_setup_id', setup.id)
+            .order('position')
+            .abortSignal(signal),
+        WAR_READ_TIMEOUT_MS
+      );
+      if (result.error) throw new Error(`Failed to load party members: ${result.error.message}`);
+      return result;
+    }),
   ]);
 
   const groups = (groupsResult.data ?? []) as WarGroup[];
   const members = ((membersResult.data ?? []) as WarPartyMember[]).filter((m) => !!m.profile);
 
+  const fetchPartiesWithRetry = () =>
+    withReadRetry(async () => {
+      const result = await withDbTiming(
+        'GET',
+        `war_parties.byGroups groups=${groups.length}`,
+        (signal) =>
+          supabase
+            .from('war_parties')
+            .select('*')
+            .in('group_id', groups.map((g) => g.id))
+            .order('party_number')
+            .abortSignal(signal),
+        WAR_READ_TIMEOUT_MS
+      );
+      if (result.error) throw new Error(`Failed to load party slots: ${result.error.message}`);
+      return result;
+    });
+
   let parties: WarParty[] = [];
   if (groups.length > 0) {
-    const { data: partiesData } = await withDbTiming(
-      'GET',
-      `war_parties.byGroups groups=${groups.length}`,
-      () =>
-        supabase
-          .from('war_parties')
-          .select('*')
-          .in('group_id', groups.map((g) => g.id))
-          .order('party_number')
-    );
-
+    const { data: partiesData } = await fetchPartiesWithRetry();
     parties = (partiesData ?? []) as WarParty[];
+
+    // Repair missing default slots. Management passes the RLS insert check, so
+    // any manager opening this page fixes the setup for everyone; viewers get a
+    // permission error and keep seeing the partial board.
+    const existingSlots = new Map<string, Set<number>>();
+    for (const party of parties) {
+      const numbers = existingSlots.get(party.group_id) ?? new Set<number>();
+      numbers.add(party.party_number);
+      existingSlots.set(party.group_id, numbers);
+    }
+    const missingSlots = groups.flatMap((group) => {
+      const numbers = existingSlots.get(group.id) ?? new Set<number>();
+      return Array.from({ length: MAX_PARTIES_PER_GROUP }, (_, i) => i + 1)
+        .filter((partyNumber) => !numbers.has(partyNumber))
+        .map((partyNumber) => ({ group_id: group.id, party_number: partyNumber }));
+    });
+
+    if (missingSlots.length > 0) {
+      const { error: repairErr } = await withDbTiming(
+        'POST',
+        `war_parties.repairMissing groups=${groups.length} missing=${missingSlots.length}`,
+        () =>
+          supabase
+            .from('war_parties')
+            .upsert(missingSlots, { onConflict: 'group_id,party_number', ignoreDuplicates: true })
+      );
+      if (!repairErr) {
+        try {
+          const { data: repairedParties } = await fetchPartiesWithRetry();
+          parties = (repairedParties ?? []) as WarParty[];
+        } catch {
+          // Keep the pre-repair list; the next load retries the refetch.
+        }
+      }
+    }
   }
   const substitutes = members.filter((m) => m.is_substitute);
 
@@ -211,8 +310,14 @@ async function loadSetupData(
     };
   });
 
-  const result: WarSetupData = { setup, groups: groupsWithParties, substitutes };
-  writeCache(weekStartStr, result, eventType, eventId);
+  const incomplete =
+    groupsWithParties.length === 0 ||
+    groupsWithParties.some((group) => group.parties.length < MAX_PARTIES_PER_GROUP);
+
+  // Never cache a partial layout: it would hide missing slots until the TTL
+  // expires and could outlive a subsequent repair.
+  const result: WarSetupData = { setup, groups: groupsWithParties, substitutes, incomplete };
+  if (!incomplete) writeCache(weekStartStr, result, eventType, eventId);
   return result;
 }
 
@@ -248,7 +353,12 @@ export async function preloadWarSetup(weekStart?: Date): Promise<void> {
   await loadSetupDataShared(weekStartStr).catch((err) => { console.error('[preloadWarSetup]', err); });
 }
 
-export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: string) {
+export function useWarSetup(
+  weekStart?: Date,
+  eventType?: EventType,
+  eventId?: string,
+  enabled = true
+) {
   const currentWeekStart = getUpcomingSaturday(weekStart ?? new Date());
   const weekStartStr = formatISO(currentWeekStart, { representation: 'date' });
   const setupType: EventType = eventType ?? 'war';
@@ -264,21 +374,23 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
 
   const fetchSetup = useCallback(async () => {
     setError(null);
+    setLoading(true);
     try {
       const result = await loadSetupDataShared(weekStartStr, setupType, eventId);
       setData(result);
     } catch (e) {
-      // Fail-fast timeout: keep cached board instead of blanking it. Only
-      // surface an error when there is nothing cached to show.
-      setData((prev) => {
-        if (!prev) setError(e instanceof Error ? e.message : 'Unknown error');
-        return prev;
-      });
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setLoading(false);
     }
   }, [weekStartStr, setupType, eventId]);
 
   // Initial load: serve cache instantly, then refresh in background
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     const cached = readCache(weekStartStr, setupType, eventId);
     if (cached?.data) {
@@ -291,7 +403,8 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
       .then((result) => { if (!cancelled) { setData(result); setLoading(false); } })
       .catch((e) => {
         if (!cancelled) {
-          // Keep stale cache visible on timeout; error only when empty.
+          // Keep stale cache visible; only surface the error when there is no
+          // cached board to fall back on.
           setData((prev) => {
             if (!prev) setError(e instanceof Error ? e.message : 'Unknown error');
             return prev;
@@ -300,11 +413,11 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
         }
       });
     return () => { cancelled = true; };
-  }, [weekStartStr, setupType, eventId]);
+  }, [enabled, weekStartStr, setupType, eventId]);
 
   // Realtime subscription — watch war_party_members for this setup.
   useEffect(() => {
-    if (!data?.setup.id) return;
+    if (!enabled || !data?.setup.id) return;
     const setupId = data.setup.id;
     let refreshInFlight = false;
     let pendingRefresh = false;
@@ -317,6 +430,9 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
       try {
         const result = await loadSetupDataShared(weekStartStr, setupType, eventId);
         setData(result);
+      } catch (e) {
+        // Keep the current board; a later event or manual refresh retries.
+        console.error('[useWarSetup] realtime refresh failed:', e);
       } finally {
         refreshInFlight = false;
         if (pendingRefresh && syncEngine.getPendingCount() === 0) {
@@ -336,7 +452,7 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
       channel.unsubscribe().finally(() => supabase.removeChannel(channel));
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.setup.id, weekStartStr, setupType, eventId]);
+  }, [enabled, data?.setup.id, weekStartStr, setupType, eventId]);
 
   const createDefaultGroups = async (setupId: string) => {
     const FIXED_GROUPS = [
@@ -622,7 +738,7 @@ export function useWarSetup(weekStart?: Date, eventType?: EventType, eventId?: s
       .eq('id', partyId);
     if (err) {
       console.error('[useWarSetup] updatePartyIcon:', err);
-    } else if (updatedData) {
+    } else if (updatedData && isCacheUsable(updatedData)) {
       writeCache(weekStartStr, updatedData, setupType, eventId);
     }
   };

@@ -18,7 +18,6 @@ import { useWarSetup } from '../../hooks/useWarSetup';
 import { useAllProfiles } from '../../hooks/useAllProfiles';
 import { MemberCard } from './MemberCard';
 import { GroupBoard, SubstituteBoard } from './GroupBoard';
-import { exportElementAsPng } from '../../lib/warExport';
 import type { Profile, WarPartyMember } from '../../types';
 import { MAX_ACTIVE_MEMBERS, MAX_SUBSTITUTE_MEMBERS, MAX_PARTIES_PER_GROUP } from '../../types';
 import { useClassCatalog } from '../../contexts/ClassCatalogContext';
@@ -78,13 +77,18 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     }
   }
 
+  // Fallback for cache rows that predate the joined-profile format.
+  const profileById = useMemo(
+    () => new Map(allProfiles.map((p) => [p.id, p])),
+    [allProfiles]
+  );
+
   // Disabled members are excluded from war building: they never appear as
   // available, non-select, or assignable members (but remain on the roster).
   const availableMembers = weekAttendances
     .filter((a) => (a.status === 'join' || a.status === 'maybe') && !assignedUserIds.has(a.user_id))
-    .filter((a) => a.profile?.is_disabled !== true)
-    .map((a) => a.profile)
-    .filter((p): p is Profile => !!p);
+    .map((a) => a.profile ?? profileById.get(a.user_id))
+    .filter((p): p is Profile => !!p && p.is_disabled !== true);
 
   const respondedUserIds = new Set(weekAttendances.map((a) => a.user_id));
   const nonSelectProfiles = allProfiles.filter(
@@ -96,7 +100,11 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
 
   const maybeUserIds = new Set(
     weekAttendances
-      .filter((a) => a.status === 'maybe' && a.profile?.is_disabled !== true)
+      .filter((a) => {
+        if (a.status !== 'maybe') return false;
+        const p = a.profile ?? profileById.get(a.user_id);
+        return p?.is_disabled !== true;
+      })
       .map((a) => a.user_id)
   );
 
@@ -330,10 +338,10 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
     downloadCsv(rows, `war_setup_${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}.csv`);
   };
 
-  const handleExportPng = () => {
-    if (warSetupRef.current) {
-      exportElementAsPng(warSetupRef.current, `war_setup_${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}`);
-    }
+  const handleExportPng = async () => {
+    if (!warSetupRef.current) return;
+    const { exportElementAsPng } = await import('../../lib/warExport');
+    await exportElementAsPng(warSetupRef.current, `war_setup_${weekLabel.replace(/[^a-zA-Z0-9]/g, '_')}`);
   };
 
   const handleRemoveMember = (memberUserId: string) => {
@@ -403,8 +411,23 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         </div>
 
         {war.error && (
-          <div className="bg-red-900/40 border border-red-700 rounded-lg p-3 mb-4 text-red-300 text-sm">
-            {war.error}
+          <div className="bg-red-900/40 border border-red-700 rounded-lg p-3 mb-4 text-red-300 text-sm flex items-center justify-between gap-3">
+            <span>{war.error}</span>
+            <button
+              onClick={() => void war.refresh()}
+              disabled={war.loading}
+              className="shrink-0 rounded-md bg-red-800/70 px-3 py-1 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {war.loading ? 'Retrying…' : 'Retry'}
+            </button>
+          </div>
+        )}
+
+        {war.data?.incomplete && (
+          <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 mb-4 text-amber-300 text-sm">
+            {war.data.groups.length === 0
+              ? "This week's war setup exists on the server but has no groups yet. A manager needs to repair it."
+              : 'Some party slots are missing on the server. A manager can open this page to repair them automatically.'}
           </div>
         )}
 
@@ -467,7 +490,7 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         {war.data && (
           <div className="flex justify-end gap-2 mt-2 mb-4">
             <button
-              onClick={handleExportPng}
+              onClick={() => void handleExportPng()}
               className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
               title="Export war setup as PNG image"
             >
@@ -484,24 +507,30 @@ export function ManagementPage({ userId, canEdit }: ManagementPageProps) {
         )}
 
         {!war.data ? (
-          <div className="text-center py-20">
-            <div className="text-6xl mb-4">⚔️</div>
-            <h2 className="text-white text-xl font-bold mb-2">No War Setup Yet</h2>
-            <p className="text-slate-400 mb-6">
-              {canEdit
-                ? 'Create a war setup to start organizing parties for this week.'
-                : 'Management has not created a war setup for this week yet.'}
-            </p>
-            {canEdit && (
-              <button
-                onClick={handleCreateSetup}
-                disabled={war.loading}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-3 px-8 rounded-xl transition-colors"
-              >
-                {war.loading ? 'Creating…' : 'Create War Setup'}
-              </button>
-            )}
-          </div>
+          war.error ? (
+            <div className="text-center py-20 text-slate-400 text-sm">
+              Could not load this week&apos;s war setup. Use Retry above.
+            </div>
+          ) : (
+            <div className="text-center py-20">
+              <div className="text-6xl mb-4">⚔️</div>
+              <h2 className="text-white text-xl font-bold mb-2">No War Setup Yet</h2>
+              <p className="text-slate-400 mb-6">
+                {canEdit
+                  ? 'Create a war setup to start organizing parties for this week.'
+                  : 'Management has not created a war setup for this week yet.'}
+              </p>
+              {canEdit && (
+                <button
+                  onClick={handleCreateSetup}
+                  disabled={war.loading}
+                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-3 px-8 rounded-xl transition-colors"
+                >
+                  {war.loading ? 'Creating…' : 'Create War Setup'}
+                </button>
+              )}
+            </div>
+          )
         ) : (
           <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-start">
             {/* Left: Available members + Non-Select members */}
@@ -639,7 +668,7 @@ function NonSelectPanel({ profiles }: { profiles: Profile[] }) {
             className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700"
           >
             {p.avatar_url ? (
-              <img src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-6 h-6 rounded-full shrink-0" />
+              <img loading="lazy" decoding="async" src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-6 h-6 rounded-full shrink-0" />
             ) : (
               <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                 {(p.username ?? '?').charAt(0).toUpperCase()}

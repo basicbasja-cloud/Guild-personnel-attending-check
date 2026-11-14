@@ -555,7 +555,7 @@ export function PlayerStatsDashboard() {
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2.5">
                           {s.profile.avatar_url ? (
-                            <img src={s.profile.avatar_url} alt={s.profile.username} className="w-7 h-7 rounded-full shrink-0" />
+                            <img loading="lazy" decoding="async" src={s.profile.avatar_url} alt={s.profile.username} className="w-7 h-7 rounded-full shrink-0" />
                           ) : (
                             <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
                               {s.profile.username.charAt(0).toUpperCase()}

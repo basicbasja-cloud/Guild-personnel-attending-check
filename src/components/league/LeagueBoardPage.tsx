@@ -747,7 +747,7 @@ export function LeagueBoardPage({ userId: _userId, isManagement, parties, onUpda
                 }}
               >
                 {/* Map background */}
-                <img
+                <img loading="lazy" decoding="async"
                   src={`${import.meta.env.BASE_URL}league-map.jpg`}
                   alt="League Map"
                   className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
@@ -959,7 +959,7 @@ export function LeagueBoardPage({ userId: _userId, isManagement, parties, onUpda
                       {selParty.members.map((m) => (
                         <div key={m.id} className="flex items-start gap-2">
                           {m.avatarUrl ? (
-                            <img src={m.avatarUrl} className="w-7 h-7 rounded-full shrink-0 mt-0.5" alt="" />
+                            <img loading="lazy" decoding="async" src={m.avatarUrl} className="w-7 h-7 rounded-full shrink-0 mt-0.5" alt="" />
                           ) : (
                             <div className="w-7 h-7 rounded-full bg-slate-700 shrink-0 flex items-center justify-center text-xs font-bold text-white mt-0.5">
                               {m.username.charAt(0).toUpperCase()}

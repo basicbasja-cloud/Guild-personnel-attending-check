@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useKpiEntry } from '../../hooks/useKpiEntry';
 import { invalidateKpiBoardCache } from '../../hooks/useKpiBoard';
 import { invalidateKpiProfileCache } from '../../hooks/useKpiProfile';
@@ -39,6 +39,11 @@ export function KpiEntryModal({
   onSaved,
   onDeleted,
 }: KpiEntryModalProps) {
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }, []);
   const { entry, loading, saving, deleting, error, fetch, save, deleteEntry } = useKpiEntry();
   const [roleTag, setRoleTag]             = useState<KpiRoleTag>('ROLE_DPS_DMG');
   const [values, setValues]               = useState<Record<KpiMetricKey, number>>({ ...EMPTY_KPI_VALUES });
@@ -88,7 +93,8 @@ export function KpiEntryModal({
       invalidateKpiProfileCache(targetUserId);
       invalidateKpiEntriesCache(weekStart);
       setToast('Stats saved ✓');
-      setTimeout(() => { onSaved(); onClose(); }, 800);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = setTimeout(() => { onSaved(); onClose(); }, 800);
     }
   };
 

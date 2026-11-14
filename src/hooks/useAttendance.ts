@@ -7,7 +7,15 @@ import type { Attendance, AttendanceStatus } from '../types';
 
 const WEEK_ATTENDANCE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const WEEK_ATTENDANCE_STORAGE_PREFIX = 'gwm_att_v1_';
-const weekAttendanceCache = new Map<string, { at: number; rows: Attendance[] }>();
+// Bump when the cached row shape changes so older/partial entries are dropped.
+const WEEK_ATTENDANCE_CACHE_VERSION = 2;
+
+interface WeekAttendanceCacheEntry {
+  v: number;
+  at: number;
+  rows: Attendance[];
+}
+const weekAttendanceCache = new Map<string, WeekAttendanceCacheEntry>();
 
 // ── Shared fetch deduplication ─────────────────────────────────────────────
 // Multiple hook instances (App, AttendancePage, ManagementPage) watch the
@@ -25,7 +33,7 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
     const { data: baseData, error: baseErr } = await withDbTiming(
       'GET',
       `attendance.rows week=${weekStartStr}`,
-      () =>
+      (signal) =>
         supabase
           .from('attendance')
           .select(`
@@ -35,6 +43,7 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
           `)
           .eq('week_start', weekStartStr)
           .order('created_at', { ascending: true })
+          .abortSignal(signal)
     );
 
     if (baseErr) throw baseErr;
@@ -44,32 +53,51 @@ async function fetchWeekRows(weekStartStr: string): Promise<Attendance[]> {
       profile: Array.isArray(r.profile) ? (r.profile[0] ?? null) : r.profile,
       set_by_profile: Array.isArray(r.set_by_profile) ? (r.set_by_profile[0] ?? null) : r.set_by_profile,
     })) as Attendance[];
-    const entry = { at: Date.now(), rows };
+
+    // Never cache an empty result: it may be an anonymous/expired-session
+    // response and would otherwise hide real data for the full TTL.
+    if (rows.length === 0) return rows;
+
+    const entry: WeekAttendanceCacheEntry = { v: WEEK_ATTENDANCE_CACHE_VERSION, at: Date.now(), rows };
     weekAttendanceCache.set(weekStartStr, entry);
     persistWeek(weekStartStr, entry);
     return rows;
   })();
 
   activeFetches.set(weekStartStr, promise);
-  promise.finally(() => activeFetches.delete(weekStartStr));
+  const cleanup = () => activeFetches.delete(weekStartStr);
+  promise.then(cleanup, cleanup);
   return promise;
+}
+
+/**
+ * Warm the joined attendance cache before React mounts. Shares the in-flight
+ * request with useAttendance, so the page still issues only one query.
+ */
+export function warmAttendanceForWeek(weekStartStr: string): Promise<Attendance[]> {
+  return fetchWeekRows(weekStartStr);
 }
 // ── End shared fetch deduplication ────────────────────────────────────────
 
-function readPersistedWeek(weekStr: string): { at: number; rows: Attendance[] } | null {
+function readPersistedWeek(weekStr: string): WeekAttendanceCacheEntry | null {
   try {
-    const raw = localStorage.getItem(WEEK_ATTENDANCE_STORAGE_PREFIX + weekStr);
+    const key = WEEK_ATTENDANCE_STORAGE_PREFIX + weekStr;
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    // Guard against old cache format missing the rows array
-    if (!parsed || !Array.isArray(parsed.rows)) return null;
-    return parsed as { at: number; rows: Attendance[] };
+    const parsed = JSON.parse(raw) as Partial<WeekAttendanceCacheEntry>;
+    // Drop legacy/partial entries (e.g. base columns written by an old
+    // pre-render prefetch) so they can never suppress the joined fetch.
+    if (!parsed || parsed.v !== WEEK_ATTENDANCE_CACHE_VERSION || !Array.isArray(parsed.rows)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed as WeekAttendanceCacheEntry;
   } catch {
     return null;
   }
 }
 
-function persistWeek(weekStr: string, entry: { at: number; rows: Attendance[] }) {
+function persistWeek(weekStr: string, entry: WeekAttendanceCacheEntry) {
   try {
     localStorage.setItem(WEEK_ATTENDANCE_STORAGE_PREFIX + weekStr, JSON.stringify(entry));
   } catch {
@@ -287,6 +315,7 @@ export function useAttendance(userId: string | null, weekStart?: Date, enabled =
     const cachedEntry = weekAttendanceCache.get(weekStartStr);
     if (cachedEntry) {
       weekAttendanceCache.set(weekStartStr, {
+        v: WEEK_ATTENDANCE_CACHE_VERSION,
         at: cachedEntry.at,
         rows: cachedEntry.rows.some((a) => a.user_id === userId)
           ? cachedEntry.rows.map((a) =>

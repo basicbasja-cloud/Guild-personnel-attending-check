@@ -99,6 +99,7 @@ export function useAllTitles(): {
     if (cached) {
       setTitles(cached);
       setLoading(false);
+      return; // still fresh — no refetch needed
     }
     refresh();
   }, [refresh]);
@@ -139,6 +140,7 @@ export function useUserTitles(userId: string | null): {
     if (cached) {
       setUserTitles(cached);
       setLoading(false);
+      return; // still fresh — no refetch needed
     }
     refresh();
   }, [userId, key, refresh]);

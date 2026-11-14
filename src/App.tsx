@@ -1,42 +1,79 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/auth/LoginPage';
 import { AccessKeyGatePage } from './components/auth/AccessKeyGatePage';
 import { Header } from './components/layout/Header';
 import { AttendancePage } from './components/attendance/AttendancePage';
-import { ManagementPage } from './components/management/ManagementPage';
-import { RosterPage } from './components/management/RosterPage';
-import { AdminModePage } from './components/management/AdminModePage';
-import { PlayerStatsDashboard } from './components/management/PlayerStatsDashboard';
-import { ResponseLogPage } from './components/management/ResponseLogPage';
-import { LeagueBoardPage } from './components/league/LeagueBoardPage';
 import type { PartySummaryWithMembers } from './components/league/LeagueBoardPage';
-import { GuildCalendarPage } from './components/calendar/GuildCalendarPage';
-import { ProfilePage } from './components/profile/ProfilePage';
-import { KpiStatsPage } from './components/kpi/KpiStatsPage';
-import { AnnouncementsPage } from './components/announcements/AnnouncementsPage';
 import { MemberOfTheWeekBanner } from './components/motw/MemberOfTheWeekBanner';
 import { Badge } from './components/ui/Badge';
-import { preloadKpiBoard } from './hooks/useKpiBoard';
-import { preloadLeagueBoard } from './hooks/useLeagueBoard';
-import { preloadKpiProfile } from './hooks/useKpiProfile';
-import { preloadProfiles } from './hooks/useAllProfiles';
-import { preloadAttendance } from './hooks/useAttendance';
-import { preloadAttendanceLog } from './hooks/useAttendanceResponseLog';
-import { preloadWarSetup, useWarSetup } from './hooks/useWarSetup';
-import { preloadGuildEvents, useGuildEvents } from './hooks/useGuildEvents';
+import { useWarSetup } from './hooks/useWarSetup';
+import { useGuildEvents } from './hooks/useGuildEvents';
 import { useTrainingNotification } from './hooks/useTrainingNotification';
 import { FloatingNotification } from './components/ui/FloatingNotification';
 import { ClassCatalogProvider } from './contexts/ClassCatalogContext';
 import { supabaseConfigError } from './lib/supabase';
 
+// Heavy tabs are split into their own chunks and loaded on first visit.
+const ManagementPage = lazy(() =>
+  import('./components/management/ManagementPage').then((m) => ({ default: m.ManagementPage }))
+);
+const RosterPage = lazy(() =>
+  import('./components/management/RosterPage').then((m) => ({ default: m.RosterPage }))
+);
+const AdminModePage = lazy(() =>
+  import('./components/management/AdminModePage').then((m) => ({ default: m.AdminModePage }))
+);
+const PlayerStatsDashboard = lazy(() =>
+  import('./components/management/PlayerStatsDashboard').then((m) => ({ default: m.PlayerStatsDashboard }))
+);
+const ResponseLogPage = lazy(() =>
+  import('./components/management/ResponseLogPage').then((m) => ({ default: m.ResponseLogPage }))
+);
+const LeagueBoardPage = lazy(() =>
+  import('./components/league/LeagueBoardPage').then((m) => ({ default: m.LeagueBoardPage }))
+);
+const GuildCalendarPage = lazy(() =>
+  import('./components/calendar/GuildCalendarPage').then((m) => ({ default: m.GuildCalendarPage }))
+);
+const ProfilePage = lazy(() =>
+  import('./components/profile/ProfilePage').then((m) => ({ default: m.ProfilePage }))
+);
+const KpiStatsPage = lazy(() =>
+  import('./components/kpi/KpiStatsPage').then((m) => ({ default: m.KpiStatsPage }))
+);
+const AnnouncementsPage = lazy(() =>
+  import('./components/announcements/AnnouncementsPage').then((m) => ({ default: m.AnnouncementsPage }))
+);
+
 type Tab = 'attendance' | 'management' | 'roster' | 'admin' | 'dashboard' | 'response-log' | 'league' | 'calendar' | 'kpi' | 'announcements';
+
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center py-20 text-slate-500 text-sm animate-pulse">
+      Loading…
+    </div>
+  );
+}
 
 function AppContent() {
   const auth = useAuth();
   const [tab, setTab] = useState<Tab>('attendance');
+  // Once a tab has been opened it stays mounted (hidden) to preserve state.
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(() => new Set<Tab>(['attendance']));
+  const openTab = useCallback((id: Tab) => {
+    setTab(id);
+    setVisitedTabs((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
   const isGoogleLoginEnabled = import.meta.env.VITE_ENABLE_GOOGLE_LOGIN === 'true';
-  const warSetup = useWarSetup();
+  // War setup is only needed by the League Board here; ManagementPage owns its
+  // own instance. Loading it lazily avoids 4 requests for every visitor.
+  const warSetup = useWarSetup(undefined, undefined, undefined, tab === 'league');
   const [myProfileOpen, setMyProfileOpen] = useState(false);
 
   // ── Training notification ──────────────────────────────────────────
@@ -44,7 +81,8 @@ function AppContent() {
     useTrainingNotification(auth.profile?.id ?? '');
 
   // ── Guild events (for training badge on calendar tab) ──────────────
-  const { events: guildEvents } = useGuildEvents();
+  // The Calendar tab has its own instance; keep only one subscription active.
+  const { events: guildEvents } = useGuildEvents(tab !== 'calendar');
 
   // ── Notification badges ────────────────────────────────────────────
   const [announcementIds, setAnnouncementIds] = useState<string[]>([]);
@@ -100,27 +138,8 @@ function AppContent() {
     return fresh.length > 0 ? fresh : lastPartiesRef.current;
   }, [warSetup.data]);
 
-  // Preload all data into cache as soon as the user is authenticated
-  // so every tab opens instantly with zero loading spinners.
-  useEffect(() => {
-    if (auth.user?.id) {
-      preloadProfiles().catch(() => {});
-      preloadAttendance().catch(() => {});
-      preloadWarSetup().catch(() => {});
-      preloadGuildEvents().catch(() => {});
-      preloadKpiBoard().catch(() => {});
-      preloadLeagueBoard().catch(() => {});
-      preloadKpiProfile(auth.user.id).catch(() => {});
-    }
-  }, [auth.user?.id]);
-
-  // Preload the manager-only Response Times log once the profile (and its
-  // is_management flag) is available, so the tab opens instantly.
-  useEffect(() => {
-    if (auth.profile?.id && auth.profile?.is_management) {
-      preloadAttendanceLog().catch(() => {});
-    }
-  }, [auth.profile?.id, auth.profile?.is_management]);
+  // Data is loaded on demand by each tab (and warmed by main.tsx for the
+  // default Attendance tab) so login does not fan out across every feature.
 
   if (auth.loading) {
     return (
@@ -203,7 +222,7 @@ function AppContent() {
               <button
                 key={t.id}
                 onClick={() => {
-                  setTab(t.id);
+                  openTab(t.id);
                   if (t.id === 'calendar') {
                     dismissTrainingNotif();
                   }
@@ -231,6 +250,7 @@ function AppContent() {
 
         {/* Page content */}
         <main className="flex-1 overflow-auto">
+          <Suspense fallback={<PageFallback />}>
           {tab === 'attendance' && (
             <AttendancePage profile={auth.profile} onUpdateProfile={auth.updateProfile} />
           )}
@@ -255,29 +275,33 @@ function AppContent() {
           {tab === 'response-log' && auth.profile.is_management && (
             <ResponseLogPage />
           )}
-          {/* League board stays mounted to preserve state across tab switches.
+          {/* League board stays mounted after first visit to preserve state.
               Realtime + fetches pause while hidden (active=false) so background
               tabs don't burn Disk IO budget; cache still renders on return. */}
-          <div className={tab === 'league' ? '' : 'hidden'}>
-            <LeagueBoardPage
-              userId={auth.profile.id}
-              isManagement={auth.profile.is_management}
-              parties={partySummaries}
-              active={tab === 'league'}
-              onUpdatePartyIcon={async (partyId, icon) => {
-                await warSetup.updatePartyIcon(partyId, icon);
-              }}
-            />
-          </div>
-          {/* Calendar stays mounted to preserve scroll position */}
-          <div className={tab === 'calendar' ? '' : 'hidden'}>
-            <GuildCalendarPage
-              isManagement={auth.profile.is_management}
-              userId={auth.profile.id}
-              isDisabled={auth.profile.is_disabled === true}
-              active={tab === 'calendar'}
-            />
-          </div>
+          {visitedTabs.has('league') && (
+            <div className={tab === 'league' ? '' : 'hidden'}>
+              <LeagueBoardPage
+                userId={auth.profile.id}
+                isManagement={auth.profile.is_management}
+                parties={partySummaries}
+                active={tab === 'league'}
+                onUpdatePartyIcon={async (partyId, icon) => {
+                  await warSetup.updatePartyIcon(partyId, icon);
+                }}
+              />
+            </div>
+          )}
+          {/* Calendar stays mounted after first visit to preserve scroll position */}
+          {visitedTabs.has('calendar') && (
+            <div className={tab === 'calendar' ? '' : 'hidden'}>
+              <GuildCalendarPage
+                isManagement={auth.profile.is_management}
+                userId={auth.profile.id}
+                isDisabled={auth.profile.is_disabled === true}
+                active={tab === 'calendar'}
+              />
+            </div>
+          )}
           {tab === 'kpi' && (
             <KpiStatsPage
               currentUserId={auth.profile.id}
@@ -286,6 +310,7 @@ function AppContent() {
               isDisabled={auth.profile.is_disabled === true}
             />
           )}
+          </Suspense>
         </main>
 
         {/* Floating training notification */}
@@ -295,7 +320,7 @@ function AppContent() {
             onDismiss={dismissTrainingNotif}
             onClick={() => {
               dismissTrainingNotif();
-              setTab('calendar');
+              openTab('calendar');
             }}
           />
         )}
@@ -303,13 +328,15 @@ function AppContent() {
 
       {/* My Profile modal — always editable (own profile) */}
       {myProfileOpen && (
-        <ProfilePage
-          userId={auth.profile.id}
-          currentUserId={auth.profile.id}
-          isManagement={auth.profile.is_management}
-          readOnly={false}
-          onClose={() => setMyProfileOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <ProfilePage
+            userId={auth.profile.id}
+            currentUserId={auth.profile.id}
+            isManagement={auth.profile.is_management}
+            readOnly={false}
+            onClose={() => setMyProfileOpen(false)}
+          />
+        </Suspense>
       )}
     </ClassCatalogProvider>
   );

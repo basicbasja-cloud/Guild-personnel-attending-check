@@ -125,7 +125,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                     onClick={() => onMemberClick && onMemberClick(a.user_id)}
                   >
                     {profile?.avatar_url ? (
-                      <img src={profile.avatar_url} alt={profile.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
+                      <img loading="lazy" decoding="async" src={profile.avatar_url} alt={profile.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
                     ) : (
                       <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                         {(profile?.username ?? '?').charAt(0).toUpperCase()}
@@ -166,7 +166,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                   onClick={() => onMemberClick && onMemberClick(p.id)}
                 >
                   {p.avatar_url ? (
-                    <img src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
+                    <img loading="lazy" decoding="async" src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0" />
                   ) : (
                     <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs shrink-0 font-bold">
                       {(p.username ?? '?').charAt(0).toUpperCase()}
@@ -205,7 +205,7 @@ export function AttendanceList({ attendances, weekStartStr, allProfiles, profile
                     onClick={() => onMemberClick && onMemberClick(p.id)}
                   >
                     {p.avatar_url ? (
-                      <img src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0 grayscale" />
+                      <img loading="lazy" decoding="async" src={p.avatar_url} alt={p.username ?? 'User avatar'} className="w-7 h-7 rounded-full shrink-0 grayscale" />
                     ) : (
                       <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-xs shrink-0 font-bold">
                         {(p.username ?? '?').charAt(0).toUpperCase()}

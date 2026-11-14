@@ -121,7 +121,7 @@ export function AuditLogModal({ onClose }: AuditLogModalProps) {
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           {e.actor?.avatar_url ? (
-                            <img src={e.actor.avatar_url} className="w-5 h-5 rounded-full shrink-0" alt="" />
+                            <img loading="lazy" decoding="async" src={e.actor.avatar_url} className="w-5 h-5 rounded-full shrink-0" alt="" />
                           ) : (
                             <div className="w-5 h-5 rounded-full bg-slate-700 shrink-0" />
                           )}

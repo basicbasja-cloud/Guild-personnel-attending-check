@@ -41,11 +41,16 @@ function getAuthCallbackError() {
 }
 
 async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs = 10000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Request timed out.')), timeoutMs);
+    timeoutId = setTimeout(() => reject(new Error('Request timed out.')), timeoutMs);
   });
 
-  return Promise.race([promise, timeoutPromise]);
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
 }
 
 const AUTH_INIT_TIMEOUT_MS = 12000;
@@ -250,11 +255,12 @@ export function useAuth() {
 
     try {
       const result = await withTimeout(
-        withDbTiming('GET', `profiles.fetch user=${userId}`, () =>
+        withDbTiming('GET', `profiles.fetch user=${userId}`, (signal) =>
           supabase
             .from('profiles')
             .select('*')
             .eq('id', userId)
+            .abortSignal(signal)
             .maybeSingle()
             .then((r) => r as { data: Profile | null; error: { message: string; code?: string } | null })
         ),

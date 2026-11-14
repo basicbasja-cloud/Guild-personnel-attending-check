@@ -370,7 +370,7 @@ export function TrainingSetupModal({
                           className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-800/60 opacity-60"
                         >
                           {p.avatar_url ? (
-                            <img src={p.avatar_url} alt="" className="w-6 h-6 rounded-full shrink-0" />
+                            <img loading="lazy" decoding="async" src={p.avatar_url} alt="" className="w-6 h-6 rounded-full shrink-0" />
                           ) : (
                             <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
                               {p.username.charAt(0).toUpperCase()}

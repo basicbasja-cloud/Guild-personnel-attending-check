@@ -1,13 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
+import { formatISO, subDays } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { withDbTiming } from '../lib/dbTiming';
+import { getUpcomingSaturday } from '../lib/week';
 import type { AttendanceStatus, Profile } from '../types';
 
 // ── Module-level cache ──────────────────────────────────────────────────────
-// One shared copy for every hook instance; preloadAttendanceLog() warms it
-// right after login so the manager-only tab opens instantly with no spinner.
+// Keyed by the selected period so switching between windows does not thrash.
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-let memCache: { at: number; entries: AttendanceLogEntry[] } | null = null;
+export const RESPONSE_LOG_DEFAULT_WEEKS = 4;
+export const RESPONSE_LOG_MAX_ROWS = 1000;
+
+interface ResponseLogCache {
+  at: number;
+  entries: AttendanceLogEntry[];
+  truncated: boolean;
+}
+const memCache = new Map<number, ResponseLogCache>();
+
+/** ISO date of the oldest week included for the selected window. */
+export function responseLogCutoff(weeksBack: number): string {
+  const weeks = Math.max(1, Math.min(52, Math.trunc(weeksBack)));
+  return formatISO(subDays(getUpcomingSaturday(new Date()), (weeks - 1) * 7), {
+    representation: 'date',
+  });
+}
 
 /** A single attendance response across ALL weeks (one row per player/week). */
 export interface AttendanceLogEntry {
@@ -23,19 +40,26 @@ export interface AttendanceLogEntry {
 }
 
 const PROFILE_COLUMNS =
-  'id,discord_id,username,avatar_url,character_name,character_class,main_skill_name,main_skill_level,sub_skill_name,sub_skill_level,is_management,is_admin,created_at';
+  'id,username,avatar_url,character_name,character_class,is_management,is_admin';
 
-async function fetchEntries(): Promise<AttendanceLogEntry[]> {
-  const { data, error } = await withDbTiming('GET', 'attendance.response_log', () =>
-    supabase
-      .from('attendance')
-      .select(
-        `id,user_id,week_start,status,created_at,updated_at,set_by,
-         profile:user_id(${PROFILE_COLUMNS}),
-         set_by_profile:set_by(${PROFILE_COLUMNS})`
-      )
-      .order('week_start', { ascending: false })
-      .order('created_at', { ascending: true })
+async function fetchEntries(weeksBack: number): Promise<ResponseLogCache> {
+  const cutoff = responseLogCutoff(weeksBack);
+  const { data, error } = await withDbTiming(
+    'GET',
+    `attendance.response_log weeks=${weeksBack}`,
+    (signal) =>
+      supabase
+        .from('attendance')
+        .select(
+          `id,user_id,week_start,status,created_at,updated_at,set_by,
+           profile:user_id(${PROFILE_COLUMNS}),
+           set_by_profile:set_by(${PROFILE_COLUMNS})`
+        )
+        .gte('week_start', cutoff)
+        .order('week_start', { ascending: false })
+        .order('created_at', { ascending: true })
+        .range(0, RESPONSE_LOG_MAX_ROWS - 1)
+        .abortSignal(signal)
   );
   if (error) throw error;
   // Supabase returns joined FK data as arrays; normalize to nullable objects.
@@ -46,29 +70,32 @@ async function fetchEntries(): Promise<AttendanceLogEntry[]> {
       ? (r.set_by_profile[0] ?? null)
       : r.set_by_profile,
   })) as AttendanceLogEntry[];
-  memCache = { at: Date.now(), entries };
-  return entries;
+  const result: ResponseLogCache = {
+    at: Date.now(),
+    entries,
+    truncated: entries.length >= RESPONSE_LOG_MAX_ROWS,
+  };
+  memCache.set(weeksBack, result);
+  // Keep at most two periods in memory while the selector changes.
+  if (memCache.size > 2) {
+    const oldest = [...memCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) memCache.delete(oldest[0]);
+  }
+  return result;
 }
 
 /**
- * Eagerly warm the response-log cache. Call once after login for managers
- * so the tab renders instantly.
+ * Response log for a bounded window of weeks. Manager-only data (the tab is
+ * gated client-side by `is_management`). Loading this on demand instead of at
+ * login keeps the startup request count and payload small.
  */
-export async function preloadAttendanceLog(): Promise<void> {
-  if (memCache && Date.now() - memCache.at < CACHE_TTL_MS) return;
-  await fetchEntries().catch((err) => {
-    console.error('[preloadAttendanceLog]', err);
-  });
-}
-
-/**
- * Full response log across all weeks — who pressed join / not join / maybe
- * and exactly when. Manager-only data (tab is gated client-side by
- * `is_management`; the underlying table is readable by all authenticated
- * users, same as the rest of attendance).
- */
-export function useAttendanceResponseLog(enabled = true) {
-  const [entries, setEntries] = useState<AttendanceLogEntry[]>(() => memCache?.entries ?? []);
+export function useAttendanceResponseLog(
+  enabled = true,
+  weeksBack = RESPONSE_LOG_DEFAULT_WEEKS
+) {
+  const initial = memCache.get(weeksBack);
+  const [entries, setEntries] = useState<AttendanceLogEntry[]>(initial?.entries ?? []);
+  const [truncated, setTruncated] = useState(initial?.truncated ?? false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,41 +103,51 @@ export function useAttendanceResponseLog(enabled = true) {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const rows = await fetchEntries();
-      setEntries(rows);
+      const result = await fetchEntries(weeksBack);
+      setEntries(result.entries);
+      setTruncated(result.truncated);
       setError(null);
     } catch (err) {
       setError((err as { message?: string }).message ?? 'Failed to fetch response log');
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [weeksBack]);
 
   useEffect(() => {
     if (!enabled) return;
 
-    const isFresh = memCache !== null && Date.now() - memCache.at < CACHE_TTL_MS;
-    if (isFresh) return;
+    const cached = memCache.get(weeksBack);
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+      setEntries(cached.entries);
+      setTruncated(cached.truncated);
+      setLoading(false);
+      setError(null);
+      return;
+    }
 
     let cancelled = false;
-    if (!memCache || memCache.entries.length === 0) setLoading(true);
-    fetchEntries()
-      .then((rows) => {
+    setLoading(true);
+    setError(null);
+    setTruncated(false);
+    fetchEntries(weeksBack)
+      .then((result) => {
         if (cancelled) return;
-        setEntries(rows);
-        setError(null);
-        setLoading(false);
+        setEntries(result.entries);
+        setTruncated(result.truncated);
       })
       .catch((err) => {
         if (cancelled) return;
         setError((err as { message?: string }).message ?? 'Failed to fetch response log');
-        setLoading(false);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, weeksBack]);
 
-  return { entries, loading, error, refreshing, refresh };
+  return { entries, loading, error, refreshing, refresh, truncated };
 }

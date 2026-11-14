@@ -77,7 +77,7 @@ export function OnBehalfSection({
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors text-left"
               >
                 {p.avatar_url ? (
-                  <img src={p.avatar_url} alt={p.username} className="w-7 h-7 rounded-full shrink-0" />
+                  <img loading="lazy" decoding="async" src={p.avatar_url} alt={p.username} className="w-7 h-7 rounded-full shrink-0" />
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                     {p.username.charAt(0).toUpperCase()}
@@ -102,7 +102,7 @@ export function OnBehalfSection({
     <div className="bg-slate-900 rounded-2xl border border-indigo-800/60 p-5">
       <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-slate-800 border border-slate-700">
         {selected.avatar_url ? (
-          <img src={selected.avatar_url} alt={selected.username} className="w-9 h-9 rounded-full shrink-0" />
+          <img loading="lazy" decoding="async" src={selected.avatar_url} alt={selected.username} className="w-9 h-9 rounded-full shrink-0" />
         ) : (
           <div className="w-9 h-9 rounded-full bg-slate-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
             {selected.username.charAt(0).toUpperCase()}

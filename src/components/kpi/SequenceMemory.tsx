@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { recordScore, getBestScore } from '../../hooks/useScoreboard';
 
 const GAME_KEY = 'sequence_memory';
@@ -23,6 +23,20 @@ export function SequenceMemory({ onScore }: SequenceMemoryProps) {
   const [highScore, setHighScore] = useState(() => getBestScore(GAME_KEY));
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [round, setRound] = useState(1);
+  const timeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  const schedule = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(() => {
+      timeoutsRef.current.delete(id);
+      fn();
+    }, ms);
+    timeoutsRef.current.add(id);
+  }, []);
+
+  useEffect(() => () => {
+    for (const id of timeoutsRef.current) clearTimeout(id);
+    timeoutsRef.current.clear();
+  }, []);
 
   const startGame = useCallback(() => {
     const seq = Array.from({ length: START_LENGTH }, () => Math.floor(Math.random() * 4));
@@ -39,21 +53,21 @@ export function SequenceMemory({ onScore }: SequenceMemoryProps) {
     let i = 0;
     const interval = setInterval(() => {
       setActiveIdx(sequence[i]);
-      setTimeout(() => setActiveIdx(null), SHOW_DELAY / 2);
+      schedule(() => setActiveIdx(null), SHOW_DELAY / 2);
       i++;
       if (i >= sequence.length) {
         clearInterval(interval);
-        setTimeout(() => setPhase('input'), 300);
+        schedule(() => setPhase('input'), 300);
       }
     }, SHOW_DELAY);
     return () => clearInterval(interval);
-  }, [phase, sequence]);
+  }, [phase, sequence, schedule]);
 
   const handleColorClick = useCallback((colorIdx: number) => {
     if (phase !== 'input') return;
 
     setActiveIdx(colorIdx);
-    setTimeout(() => setActiveIdx(null), 200);
+    schedule(() => setActiveIdx(null), 200);
 
     if (colorIdx !== sequence[inputIdx]) {
       // Wrong!
@@ -75,11 +89,11 @@ export function SequenceMemory({ onScore }: SequenceMemoryProps) {
       const newSeq = [...sequence, Math.floor(Math.random() * 4)];
       setSequence(newSeq);
       setInputIdx(0);
-      setTimeout(() => setPhase('showing'), 400);
+      schedule(() => setPhase('showing'), 400);
     } else {
       setInputIdx(nextIdx);
     }
-  }, [phase, sequence, inputIdx, score]);
+  }, [phase, sequence, inputIdx, score, schedule]);
 
   return (
     <div className="flex flex-col items-center gap-3">
